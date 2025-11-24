@@ -298,8 +298,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	// Skip this test - it requires valid credentials to pass validation
 	t.Skip("Skipping test that requires valid Prime credentials")
 
-	// Load config from non-existent file (should use defaults)
-	cfg, err := LoadConfig("non-existent.yaml")
+	// Load config (should use defaults)
+	cfg, err := LoadConfig()
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
@@ -403,117 +403,5 @@ func TestLoadFromEnv_EmptyValues(t *testing.T) {
 	// Empty env vars should not overwrite existing values
 	if cfg.Prime.AccessKey != "initial-value" {
 		t.Errorf("Prime.AccessKey = %q, want initial-value (should not be overwritten)", cfg.Prime.AccessKey)
-	}
-}
-
-func TestLoadYAML_FileNotFound(t *testing.T) {
-	cfg := &Config{}
-	err := loadYAML("non-existent-file.yaml", cfg)
-
-	// File not found is NOT an error (returns nil)
-	if err != nil {
-		t.Errorf("loadYAML() with non-existent file should return nil, got: %v", err)
-	}
-}
-
-func TestLoadYAML_ValidFile(t *testing.T) {
-	// Create temporary YAML file
-	content := `
-prime:
-  access_key: yaml-access-key
-  passphrase: yaml-passphrase
-  signing_key: yaml-signing-key
-  portfolio: yaml-portfolio
-  service_account_id: yaml-account
-
-market_data:
-  products:
-    - BTC-USD
-    - ETH-USD
-
-fees:
-  type: percent
-  percent: "0.005"
-
-database:
-  path: test.db
-
-server:
-  log_level: debug
-  log_json: true
-`
-
-	tmpFile, err := os.CreateTemp("", "test-config-*.yaml")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.WriteString(content); err != nil {
-		t.Fatalf("Failed to write temp file: %v", err)
-	}
-	tmpFile.Close()
-
-	cfg := &Config{}
-	err = loadYAML(tmpFile.Name(), cfg)
-	if err != nil {
-		t.Fatalf("loadYAML() error = %v", err)
-	}
-
-	// Verify loaded values
-	if cfg.Prime.AccessKey != "yaml-access-key" {
-		t.Errorf("Prime.AccessKey = %q, want yaml-access-key", cfg.Prime.AccessKey)
-	}
-
-	if cfg.Prime.Portfolio != "yaml-portfolio" {
-		t.Errorf("Prime.Portfolio = %q, want yaml-portfolio", cfg.Prime.Portfolio)
-	}
-
-	if len(cfg.MarketData.Products) != 2 {
-		t.Errorf("len(MarketData.Products) = %d, want 2", len(cfg.MarketData.Products))
-	}
-
-	if cfg.Fees.Type != "percent" {
-		t.Errorf("Fees.Type = %q, want percent", cfg.Fees.Type)
-	}
-
-	if cfg.Database.Path != "test.db" {
-		t.Errorf("Database.Path = %q, want test.db", cfg.Database.Path)
-	}
-
-	if cfg.Server.LogLevel != "debug" {
-		t.Errorf("Server.LogLevel = %q, want debug", cfg.Server.LogLevel)
-	}
-
-	if !cfg.Server.LogJson {
-		t.Error("Server.LogJson = false, want true")
-	}
-}
-
-func TestLoadYAML_InvalidYAML(t *testing.T) {
-	// Create temporary file with invalid YAML
-	content := `
-this is not
-  valid: yaml: content
-    - broken
-`
-
-	tmpFile, err := os.CreateTemp("", "test-invalid-*.yaml")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.WriteString(content); err != nil {
-		t.Fatalf("Failed to write temp file: %v", err)
-	}
-	tmpFile.Close()
-
-	cfg := &Config{}
-	err = loadYAML(tmpFile.Name(), cfg)
-
-	// Should return error for invalid YAML
-	if err == nil {
-		t.Error("loadYAML() with invalid YAML should return error, got nil")
 	}
 }

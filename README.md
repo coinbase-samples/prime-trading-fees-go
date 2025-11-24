@@ -69,7 +69,7 @@ FEE_PERCENT=0.005    # 50 bps (0.5%) for all orders
 go run cmd/stream/main.go
 ```
 
-This displays Prime's live order book with **your fees already included** in the prices. Updates refresh every 5 seconds (configurable in `config.yaml` via `display_update_rate`). The displayed prices are calculated in real-time by adding your markup to Prime's WebSocket data feed.
+This displays Prime's live order book with **your fees already included** in the prices. Updates refresh every 5 seconds (configurable in `.env` via `MARKET_DATA_DISPLAY_UPDATE_RATE`). The displayed prices are calculated in real-time by adding your markup to Prime's WebSocket data feed.
 
 **2. Preview an order (simulates execution):**
 ```bash

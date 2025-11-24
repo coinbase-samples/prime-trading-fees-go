@@ -28,9 +28,6 @@ go.work
 # Environment files - NEVER commit credentials!
 .env
 
-# Config with environment-specific settings
-config.yaml
-
 # Runtime data - Database files
 *.db
 *.db-shm

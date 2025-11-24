@@ -26,25 +26,24 @@ import (
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/yaml.v3"
 )
 
 // Config holds the complete application configuration
 type Config struct {
-	Prime      PrimeConfig      `yaml:"prime"`
-	MarketData MarketDataConfig `yaml:"market_data"`
-	Fees       FeesConfig       `yaml:"fees"`
-	Server     ServerConfig     `yaml:"server"`
-	Database   DatabaseConfig   `yaml:"database"`
+	Prime      PrimeConfig
+	MarketData MarketDataConfig
+	Fees       FeesConfig
+	Server     ServerConfig
+	Database   DatabaseConfig
 }
 
 // PrimeConfig holds Coinbase Prime API credentials
 type PrimeConfig struct {
-	AccessKey        string `yaml:"access_key"`
-	Passphrase       string `yaml:"passphrase"`
-	SigningKey       string `yaml:"signing_key"`
-	Portfolio        string `yaml:"portfolio"`
-	ServiceAccountId string `yaml:"service_account_id"`
+	AccessKey        string
+	Passphrase       string
+	SigningKey       string
+	Portfolio        string
+	ServiceAccountId string
 }
 
 // String masks sensitive credentials when printing
@@ -60,34 +59,34 @@ func (p PrimeConfig) GoString() string {
 
 // MarketDataConfig holds market data settings
 type MarketDataConfig struct {
-	WebSocketUrl      string        `yaml:"websocket_url"`
-	Products          []string      `yaml:"products"`
-	MaxLevels         int           `yaml:"max_levels"`
-	ReconnectDelay    time.Duration `yaml:"reconnect_delay"`
-	InitialWaitTime   time.Duration `yaml:"initial_wait_time"`
-	DisplayUpdateRate time.Duration `yaml:"display_update_rate"`
+	WebSocketUrl      string
+	Products          []string
+	MaxLevels         int
+	ReconnectDelay    time.Duration
+	InitialWaitTime   time.Duration
+	DisplayUpdateRate time.Duration
 }
 
 // FeesConfig holds fee strategy configuration
 type FeesConfig struct {
-	Type    string `yaml:"type"` // "flat" or "percent"
-	Amount  string `yaml:"amount,omitempty"`
-	Percent string `yaml:"percent,omitempty"`
+	Type    string // "flat" or "percent"
+	Amount  string
+	Percent string
 }
 
 // ServerConfig holds server settings
 type ServerConfig struct {
-	LogLevel string `yaml:"log_level"`
-	LogJson  bool   `yaml:"log_json"`
+	LogLevel string
+	LogJson  bool
 }
 
 // DatabaseConfig holds database settings
 type DatabaseConfig struct {
-	Path string `yaml:"path"`
+	Path string
 }
 
-// LoadConfig loads configuration from file and environment
-func LoadConfig(path string) (*Config, error) {
+// LoadConfig loads configuration from environment variables
+func LoadConfig() (*Config, error) {
 	// Default configuration
 	cfg := &Config{
 		Prime: PrimeConfig{},
@@ -101,7 +100,7 @@ func LoadConfig(path string) (*Config, error) {
 		},
 		Fees: FeesConfig{
 			Type:    "percent",
-			Percent: "0.001", // 0.1%
+			Percent: "0.002", // 0.2% (20 bps)
 		},
 		Server: ServerConfig{
 			LogLevel: "info",
@@ -112,14 +111,7 @@ func LoadConfig(path string) (*Config, error) {
 		},
 	}
 
-	// Load from YAML file if it exists
-	if path != "" {
-		if err := loadYAML(path, cfg); err != nil {
-			return nil, fmt.Errorf("failed to load YAML config: %w", err)
-		}
-	}
-
-	// Override with environment variables
+	// Load from environment variables
 	loadFromEnv(cfg)
 
 	// Validate configuration
@@ -128,18 +120,6 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return cfg, nil
-}
-
-func loadYAML(path string, cfg *Config) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // File doesn't exist, use defaults
-		}
-		return err
-	}
-
-	return yaml.Unmarshal(data, cfg)
 }
 
 func loadFromEnv(cfg *Config) {
@@ -161,12 +141,30 @@ func loadFromEnv(cfg *Config) {
 	}
 
 	// Market data
+	if v := os.Getenv("MARKET_DATA_WEBSOCKET_URL"); v != "" {
+		cfg.MarketData.WebSocketUrl = v
+	}
 	if v := os.Getenv("MARKET_DATA_PRODUCTS"); v != "" {
 		cfg.MarketData.Products = strings.Split(v, ",")
 	}
 	if v := os.Getenv("MARKET_DATA_MAX_LEVELS"); v != "" {
 		if i, err := strconv.Atoi(v); err == nil {
 			cfg.MarketData.MaxLevels = i
+		}
+	}
+	if v := os.Getenv("MARKET_DATA_RECONNECT_DELAY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.MarketData.ReconnectDelay = d
+		}
+	}
+	if v := os.Getenv("MARKET_DATA_INITIAL_WAIT_TIME"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.MarketData.InitialWaitTime = d
+		}
+	}
+	if v := os.Getenv("MARKET_DATA_DISPLAY_UPDATE_RATE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.MarketData.DisplayUpdateRate = d
 		}
 	}
 

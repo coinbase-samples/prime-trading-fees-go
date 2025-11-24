@@ -487,31 +487,34 @@ Here's how to build a complete crypto trading app with marked-up fees:
 
 ### Step 1: Configuration
 
-Create `config.yaml`:
+All configuration is managed through environment variables in your `.env` file:
 
-```yaml
-prime:
-  access_key: ${PRIME_ACCESS_KEY}
-  passphrase: ${PRIME_PASSPHRASE}
-  signing_key: ${PRIME_SIGNING_KEY}
-  portfolio: ${PRIME_PORTFOLIO}
-  service_account_id: ${PRIME_SERVICE_ACCOUNT_ID}
+```bash
+# Prime API Credentials (Required)
+PRIME_ACCESS_KEY=your_access_key
+PRIME_PASSPHRASE=your_passphrase
+PRIME_SIGNING_KEY=your_signing_key
+PRIME_PORTFOLIO=your_portfolio_id
+PRIME_SERVICE_ACCOUNT_ID=your_service_account_id
 
-market_data:
-  products: [BTC-USD, ETH-USD]
-  websocket_url: wss://ws-feed.prime.coinbase.com
-  max_levels: 5
+# Market Data Configuration
+MARKET_DATA_WEBSOCKET_URL=wss://ws-feed.prime.coinbase.com
+MARKET_DATA_PRODUCTS=BTC-USD,ETH-USD
+MARKET_DATA_MAX_LEVELS=5
+MARKET_DATA_RECONNECT_DELAY=5s
+MARKET_DATA_INITIAL_WAIT_TIME=2s
+MARKET_DATA_DISPLAY_UPDATE_RATE=5s
 
-fees:
-  type: percent
-  percent: "0.005"  # 50 bps (0.5%)
+# Fee Configuration
+FEE_TYPE=percent
+FEE_PERCENT=0.005  # 50 bps (0.5%)
 
-database:
-  path: orders.db
+# Server Configuration
+LOG_LEVEL=info
+LOG_JSON=true
 
-server:
-  log_level: info
-  log_json: true
+# Database Configuration
+DATABASE_PATH=orders.db
 ```
 
 ### Step 2: Show Live Prices (with Fees)

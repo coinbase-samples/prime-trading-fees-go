@@ -199,7 +199,7 @@ func parseAndValidateFlags() (*parsedFlags, error) {
 
 // loadConfigAndSetup loads configuration and sets up dependencies
 func loadConfigAndSetup() (*config.Config, *fees.PriceAdjuster, error) {
-	cfg, err := config.LoadConfig("config.yaml")
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load config: %w", err)
 	}
