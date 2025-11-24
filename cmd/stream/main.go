@@ -59,7 +59,7 @@ func run() error {
 	store := marketdata.NewOrderBookStore()
 
 	// Create fee strategy
-	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees)
+	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees.Percent)
 	if err != nil {
 		return fmt.Errorf("failed to create fee strategy: %w", err)
 	}

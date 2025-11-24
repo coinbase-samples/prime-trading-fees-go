@@ -67,11 +67,9 @@ type MarketDataConfig struct {
 	DisplayUpdateRate time.Duration
 }
 
-// FeesConfig holds fee strategy configuration
+// FeesConfig holds percentage-based fee configuration
 type FeesConfig struct {
-	Type    string // "flat" or "percent"
-	Amount  string
-	Percent string
+	Percent string // e.g., "0.002" for 20 bps (0.2%)
 }
 
 // ServerConfig holds server settings
@@ -99,7 +97,6 @@ func LoadConfig() (*Config, error) {
 			DisplayUpdateRate: 5 * time.Second,
 		},
 		Fees: FeesConfig{
-			Type:    "percent",
 			Percent: "0.002", // 0.2% (20 bps)
 		},
 		Server: ServerConfig{
@@ -168,13 +165,7 @@ func loadFromEnv(cfg *Config) {
 		}
 	}
 
-	// Fees
-	if v := os.Getenv("FEE_TYPE"); v != "" {
-		cfg.Fees.Type = v
-	}
-	if v := os.Getenv("FEE_AMOUNT"); v != "" {
-		cfg.Fees.Amount = v
-	}
+	// Fees (percentage only)
 	if v := os.Getenv("FEE_PERCENT"); v != "" {
 		cfg.Fees.Percent = v
 	}
@@ -227,25 +218,16 @@ func (c *Config) Validate() error {
 
 // Validate checks if a fee config is valid
 func (f *FeesConfig) Validate() error {
-	switch f.Type {
-	case "flat":
-		if f.Amount == "" {
-			return fmt.Errorf("amount is required for flat fee strategy")
-		}
-		if _, err := decimal.NewFromString(f.Amount); err != nil {
-			return fmt.Errorf("invalid amount: %w", err)
-		}
-	case "percent":
-		if f.Percent == "" {
-			return fmt.Errorf("percent is required for percent fee strategy")
-		}
-		if _, err := decimal.NewFromString(f.Percent); err != nil {
-			return fmt.Errorf("invalid percent: %w", err)
-		}
-	default:
-		return fmt.Errorf("invalid fee type: %s (must be flat or percent)", f.Type)
+	if f.Percent == "" {
+		return fmt.Errorf("FEE_PERCENT is required")
 	}
-
+	percent, err := decimal.NewFromString(f.Percent)
+	if err != nil {
+		return fmt.Errorf("invalid FEE_PERCENT: %w", err)
+	}
+	if percent.IsNegative() {
+		return fmt.Errorf("FEE_PERCENT cannot be negative")
+	}
 	return nil
 }
 

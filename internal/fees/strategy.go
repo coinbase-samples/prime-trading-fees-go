@@ -19,70 +19,37 @@ package fees
 import (
 	"fmt"
 
-	"github.com/coinbase-samples/prime-trading-fees-go/config"
 	"github.com/shopspring/decimal"
 )
 
-// FeeStrategy defines the interface for computing trading fees
-type FeeStrategy interface {
-	// Compute calculates the fee for a given quantity and price
-	Compute(qty decimal.Decimal, price decimal.Decimal) (fee decimal.Decimal)
-	// ComputeFromNotional calculates the fee from a notional value (qty * price)
-	// This is used for quote-denominated orders where we already know the total value
-	ComputeFromNotional(notional decimal.Decimal) (fee decimal.Decimal)
-	// Name returns the name of the strategy
-	Name() string
+// FeeStrategy calculates percentage-based trading fees
+type FeeStrategy struct {
+	Percent decimal.Decimal // e.g., 0.001 for 0.1% (10 bps)
 }
 
-// FlatFeeStrategy applies a fixed fee amount per trade
-type FlatFeeStrategy struct {
-	Amount decimal.Decimal
+// NewFeeStrategy creates a new percentage-based fee strategy
+func NewFeeStrategy(percent decimal.Decimal) *FeeStrategy {
+	return &FeeStrategy{Percent: percent}
 }
 
-func NewFlatFeeStrategy(amount decimal.Decimal) *FlatFeeStrategy {
-	return &FlatFeeStrategy{Amount: amount}
-}
-
-func (s *FlatFeeStrategy) Compute(qty decimal.Decimal, price decimal.Decimal) decimal.Decimal {
-	return s.Amount
-}
-
-func (s *FlatFeeStrategy) ComputeFromNotional(notional decimal.Decimal) decimal.Decimal {
-	return s.Amount
-}
-
-func (s *FlatFeeStrategy) Name() string {
-	return "FlatFee"
-}
-
-// PercentFeeStrategy applies a percentage-based fee
-type PercentFeeStrategy struct {
-	Percent decimal.Decimal // e.g., 0.001 for 0.1%
-}
-
-func NewPercentFeeStrategy(percent decimal.Decimal) *PercentFeeStrategy {
-	return &PercentFeeStrategy{Percent: percent}
-}
-
-func (s *PercentFeeStrategy) Compute(qty decimal.Decimal, price decimal.Decimal) decimal.Decimal {
+// Compute calculates the fee for a given quantity and price
+func (s *FeeStrategy) Compute(qty decimal.Decimal, price decimal.Decimal) decimal.Decimal {
 	notional := qty.Mul(price)
 	return s.ComputeFromNotional(notional)
 }
 
-func (s *PercentFeeStrategy) ComputeFromNotional(notional decimal.Decimal) decimal.Decimal {
+// ComputeFromNotional calculates the fee from a notional value (qty * price)
+// This is used for quote-denominated orders where we already know the total value
+func (s *FeeStrategy) ComputeFromNotional(notional decimal.Decimal) decimal.Decimal {
 	return notional.Mul(s.Percent)
-}
-
-func (s *PercentFeeStrategy) Name() string {
-	return "PercentFee"
 }
 
 // PriceAdjuster applies fee strategy to market prices
 type PriceAdjuster struct {
-	FeeStrategy FeeStrategy
+	FeeStrategy *FeeStrategy
 }
 
-func NewPriceAdjuster(feeStrategy FeeStrategy) *PriceAdjuster {
+func NewPriceAdjuster(feeStrategy *FeeStrategy) *PriceAdjuster {
 	return &PriceAdjuster{
 		FeeStrategy: feeStrategy,
 	}
@@ -119,24 +86,14 @@ func (a *PriceAdjuster) ComputeFee(qty, price decimal.Decimal) decimal.Decimal {
 	return a.FeeStrategy.Compute(qty, price)
 }
 
-// CreateFeeStrategy creates a fee strategy from configuration
-func CreateFeeStrategy(cfg config.FeesConfig) (FeeStrategy, error) {
-	switch cfg.Type {
-	case "flat":
-		amount, err := decimal.NewFromString(cfg.Amount)
-		if err != nil {
-			return nil, fmt.Errorf("invalid flat fee amount: %w", err)
-		}
-		return NewFlatFeeStrategy(amount), nil
-
-	case "percent":
-		percent, err := decimal.NewFromString(cfg.Percent)
-		if err != nil {
-			return nil, fmt.Errorf("invalid percent: %w", err)
-		}
-		return NewPercentFeeStrategy(percent), nil
-
-	default:
-		return nil, fmt.Errorf("unknown fee strategy type: %s", cfg.Type)
+// CreateFeeStrategy creates a percentage-based fee strategy from configuration
+func CreateFeeStrategy(feePercent string) (*FeeStrategy, error) {
+	percent, err := decimal.NewFromString(feePercent)
+	if err != nil {
+		return nil, fmt.Errorf("invalid fee percent: %w", err)
 	}
+	if percent.IsNegative() {
+		return nil, fmt.Errorf("fee percent cannot be negative")
+	}
+	return NewFeeStrategy(percent), nil
 }

@@ -29,63 +29,41 @@ func TestFeesConfig_Validate(t *testing.T) {
 		errMsg  string
 	}{
 		{
-			name: "valid flat fee",
-			cfg: FeesConfig{
-				Type:   "flat",
-				Amount: "0.05",
-			},
-			wantErr: false,
-		},
-		{
 			name: "valid percent fee",
 			cfg: FeesConfig{
-				Type:    "percent",
 				Percent: "0.005",
 			},
 			wantErr: false,
 		},
 		{
-			name: "invalid type",
+			name: "valid zero fee",
 			cfg: FeesConfig{
-				Type:   "invalid",
-				Amount: "0.05",
+				Percent: "0",
 			},
-			wantErr: true,
-			errMsg:  "invalid fee type: invalid (must be flat or percent)",
+			wantErr: false,
 		},
 		{
-			name: "flat fee missing amount",
+			name: "missing percent",
 			cfg: FeesConfig{
-				Type:   "flat",
-				Amount: "",
-			},
-			wantErr: true,
-			errMsg:  "amount is required for flat fee strategy",
-		},
-		{
-			name: "flat fee invalid decimal",
-			cfg: FeesConfig{
-				Type:   "flat",
-				Amount: "invalid",
-			},
-			wantErr: true,
-		},
-		{
-			name: "percent fee missing percent",
-			cfg: FeesConfig{
-				Type:    "percent",
 				Percent: "",
 			},
 			wantErr: true,
-			errMsg:  "percent is required for percent fee strategy",
+			errMsg:  "FEE_PERCENT is required",
 		},
 		{
-			name: "percent fee invalid decimal",
+			name: "invalid decimal",
 			cfg: FeesConfig{
-				Type:    "percent",
 				Percent: "invalid",
 			},
 			wantErr: true,
+		},
+		{
+			name: "negative fee",
+			cfg: FeesConfig{
+				Percent: "-0.005",
+			},
+			wantErr: true,
+			errMsg:  "FEE_PERCENT cannot be negative",
 		},
 	}
 
@@ -128,7 +106,7 @@ func TestConfig_Validate(t *testing.T) {
 					Products: []string{"BTC-USD"},
 				},
 				Fees: FeesConfig{
-					Type:    "percent",
+
 					Percent: "0.005",
 				},
 			},
@@ -147,7 +125,7 @@ func TestConfig_Validate(t *testing.T) {
 					Products: []string{"BTC-USD"},
 				},
 				Fees: FeesConfig{
-					Type:    "percent",
+
 					Percent: "0.005",
 				},
 			},
@@ -167,7 +145,7 @@ func TestConfig_Validate(t *testing.T) {
 					Products: []string{"BTC-USD"},
 				},
 				Fees: FeesConfig{
-					Type:    "percent",
+
 					Percent: "0.005",
 				},
 			},
@@ -187,7 +165,7 @@ func TestConfig_Validate(t *testing.T) {
 					Products: []string{"BTC-USD"},
 				},
 				Fees: FeesConfig{
-					Type:    "percent",
+
 					Percent: "0.005",
 				},
 			},
@@ -207,7 +185,7 @@ func TestConfig_Validate(t *testing.T) {
 					Products: []string{"BTC-USD"},
 				},
 				Fees: FeesConfig{
-					Type:    "percent",
+
 					Percent: "0.005",
 				},
 			},
@@ -227,7 +205,7 @@ func TestConfig_Validate(t *testing.T) {
 					Products: []string{"BTC-USD"},
 				},
 				Fees: FeesConfig{
-					Type:    "percent",
+
 					Percent: "0.005",
 				},
 			},
@@ -248,7 +226,7 @@ func TestConfig_Validate(t *testing.T) {
 					Products: []string{},
 				},
 				Fees: FeesConfig{
-					Type:    "percent",
+
 					Percent: "0.005",
 				},
 			},
@@ -268,9 +246,7 @@ func TestConfig_Validate(t *testing.T) {
 				MarketData: MarketDataConfig{
 					Products: []string{"BTC-USD"},
 				},
-				Fees: FeesConfig{
-					Type: "invalid",
-				},
+				Fees: FeesConfig{},
 			},
 			wantErr: true,
 		},
@@ -317,8 +293,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 		t.Error("MarketData.Products is empty, should have defaults")
 	}
 
-	if cfg.Fees.Type != "percent" {
-		t.Errorf("Fees.Type = %q, want percent", cfg.Fees.Type)
+	if cfg.Fees.Percent != "0.002" {
+		t.Errorf("Fees.Percent = %q, want 0.002", cfg.Fees.Percent)
 	}
 }
 

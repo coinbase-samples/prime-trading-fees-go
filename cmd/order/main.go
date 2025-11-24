@@ -208,7 +208,7 @@ func loadConfigAndSetup() (*config.Config, *fees.PriceAdjuster, error) {
 	config.SetupLogger(cfg.Server.LogLevel, cfg.Server.LogJson)
 
 	// Create fee strategy
-	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees)
+	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees.Percent)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create fee strategy: %w", err)
 	}

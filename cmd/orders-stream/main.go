@@ -83,7 +83,7 @@ func run() error {
 	zap.L().Info("Database opened", zap.String("path", cfg.Database.Path))
 
 	// Create fee strategy
-	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees)
+	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees.Percent)
 	if err != nil {
 		return fmt.Errorf("failed to create fee strategy: %w", err)
 	}

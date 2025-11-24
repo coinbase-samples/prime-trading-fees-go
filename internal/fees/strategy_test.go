@@ -22,59 +22,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func TestFlatFeeStrategy(t *testing.T) {
-	tests := []struct {
-		name     string
-		amount   string
-		qty      string
-		price    string
-		expected string
-	}{
-		{
-			name:     "basic flat fee",
-			amount:   "10.00",
-			qty:      "1.0",
-			price:    "50000.00",
-			expected: "10.00",
-		},
-		{
-			name:     "flat fee independent of quantity",
-			amount:   "5.50",
-			qty:      "10.0",
-			price:    "100.00",
-			expected: "5.50",
-		},
-		{
-			name:     "flat fee independent of price",
-			amount:   "2.00",
-			qty:      "0.5",
-			price:    "100000.00",
-			expected: "2.00",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			amount := decimal.RequireFromString(tt.amount)
-			qty := decimal.RequireFromString(tt.qty)
-			price := decimal.RequireFromString(tt.price)
-			expected := decimal.RequireFromString(tt.expected)
-
-			strategy := NewFlatFeeStrategy(amount)
-			result := strategy.Compute(qty, price)
-
-			if !result.Equal(expected) {
-				t.Errorf("expected %s, got %s", expected, result)
-			}
-
-			if strategy.Name() != "FlatFee" {
-				t.Errorf("expected name 'FlatFee', got %s", strategy.Name())
-			}
-		})
-	}
-}
-
-func TestPercentFeeStrategy(t *testing.T) {
+func TestFeeStrategy(t *testing.T) {
 	tests := []struct {
 		name     string
 		percent  string
@@ -119,15 +67,11 @@ func TestPercentFeeStrategy(t *testing.T) {
 			price := decimal.RequireFromString(tt.price)
 			expected := decimal.RequireFromString(tt.expected)
 
-			strategy := NewPercentFeeStrategy(percent)
+			strategy := NewFeeStrategy(percent)
 			result := strategy.Compute(qty, price)
 
 			if !result.Equal(expected) {
 				t.Errorf("expected %s, got %s", expected, result)
-			}
-
-			if strategy.Name() != "PercentFee" {
-				t.Errorf("expected name 'PercentFee', got %s", strategy.Name())
 			}
 		})
 	}
@@ -135,7 +79,7 @@ func TestPercentFeeStrategy(t *testing.T) {
 
 func TestPriceAdjuster_AdjustBidPrice(t *testing.T) {
 	// Fee is 0.1%
-	feeStrategy := NewPercentFeeStrategy(decimal.NewFromFloat(0.001))
+	feeStrategy := NewFeeStrategy(decimal.NewFromFloat(0.001))
 
 	adjuster := NewPriceAdjuster(feeStrategy)
 
@@ -176,7 +120,7 @@ func TestPriceAdjuster_AdjustBidPrice(t *testing.T) {
 
 func TestPriceAdjuster_AdjustAskPrice(t *testing.T) {
 	// Fee is 0.1%
-	feeStrategy := NewPercentFeeStrategy(decimal.NewFromFloat(0.001))
+	feeStrategy := NewFeeStrategy(decimal.NewFromFloat(0.001))
 
 	adjuster := NewPriceAdjuster(feeStrategy)
 
@@ -216,7 +160,7 @@ func TestPriceAdjuster_AdjustAskPrice(t *testing.T) {
 }
 
 func TestPriceAdjuster_ComputeFee(t *testing.T) {
-	feeStrategy := NewPercentFeeStrategy(decimal.NewFromFloat(0.001)) // 0.1%
+	feeStrategy := NewFeeStrategy(decimal.NewFromFloat(0.001)) // 0.1%
 
 	adjuster := NewPriceAdjuster(feeStrategy)
 
@@ -255,8 +199,8 @@ func TestPriceAdjuster_ComputeFee(t *testing.T) {
 	}
 }
 
-func BenchmarkPercentFeeStrategy(b *testing.B) {
-	strategy := NewPercentFeeStrategy(decimal.NewFromFloat(0.001))
+func BenchmarkFeeStrategy(b *testing.B) {
+	strategy := NewFeeStrategy(decimal.NewFromFloat(0.001))
 	qty := decimal.NewFromInt(1)
 	price := decimal.NewFromInt(50000)
 
