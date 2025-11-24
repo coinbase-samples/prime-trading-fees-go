@@ -1,0 +1,712 @@
+# Prime Fee Passthrough Integration Guide
+
+A comprehensive guide for integrating Coinbase Prime with custom fee markup.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Business Model](#business-model)
+- [Fee Calculation Fundamentals](#fee-calculation-fundamentals)
+- [Implementation](#implementation)
+  - [1. Market Data with Fee-Adjusted Prices](#1-market-data-with-fee-adjusted-prices)
+  - [2. Order Preview](#2-order-preview)
+  - [3. Order Placement & Tracking](#3-order-placement--tracking)
+  - [4. Fee Settlement (Partial Fills)](#4-fee-settlement-partial-fills)
+- [Complete Integration Example](#complete-integration-example)
+- [Testing & Verification](#testing--verification)
+
+---
+
+## Overview
+
+This guide teaches you how to build a **fee passthrough layer** on top of Coinbase Prime by:
+
+1. **Adjusting market prices** - Show fee-inclusive prices to users
+2. **Deducting fees upfront** - Reduce order amounts before sending to Prime
+3. **Tracking execution** - Monitor fills via WebSocket
+4. **Settling partial fills** - Calculate fair rebates for unfilled portions
+
+---
+
+## Business Model
+
+### The Value Chain
+
+```
+End User → Your Application → Coinbase Prime → Crypto Markets
+          (Add Markup)        (Wholesale)
+```
+
+**Your Application's Role:**
+1. User requests: "Buy $100 of BTC"
+2. You calculate: "$100 - $0.50 (50 bps fee) = $99.50 to send to Prime"
+3. Prime executes: $99.50 market order
+4. User receives: BTC worth $99.50 (paid $100 total including your $0.50 fee)
+
+### Why This Model Works
+
+✅ **Transparent** - Users see prices including your fees upfront
+✅ **Fair** - Fees proportional to executed amount
+✅ **Scalable** - Prime handles institutional liquidity
+✅ **Simple** - No order book management required
+
+---
+
+## Fee Calculation Fundamentals
+
+### Fee Strategies
+
+#### 1. Percent Fee (Most Common)
+
+Charge a percentage of the order value.
+
+**Formula:**
+```
+fee = notional_value × fee_percent
+```
+
+**Example:** 50 basis points (0.5%)
+- Order: $10,000
+- Fee: $10,000 × 0.005 = $50
+
+**Implementation:** See `internal/fees/strategy.go:PercentFeeStrategy`
+
+#### 2. Flat Fee
+
+Fixed fee per trade regardless of size.
+
+**Formula:**
+```
+fee = fixed_amount
+```
+
+**Example:** $2.99 per trade
+- Order: Any size
+- Fee: $2.99
+
+**Implementation:** See `internal/fees/strategy.go:FlatFeeStrategy`
+
+### Configuration
+
+```yaml
+fees:
+  type: percent
+  percent: "0.005"  # 50 bps (0.5%)
+```
+
+---
+
+## Implementation
+
+### 1. Market Data with Fee-Adjusted Prices
+
+**Purpose:** Show users prices that **include your fees** so they know the true cost upfront.
+
+#### How It Works
+
+Prime provides raw bid/ask prices. You adjust them to include your markup:
+
+**For BUY orders (user buying crypto):**
+- **Ask price goes UP** (user pays more)
+- Formula: `adjusted_ask = prime_ask × (1 + fee_rate)`
+
+**For SELL orders (user selling crypto):**
+- **Bid price goes DOWN** (user receives less)
+- Formula: `adjusted_bid = prime_bid × (1 - fee_rate)`
+
+#### The Math
+
+**Example with 50 bps (0.5%) fee:**
+
+Prime's Raw Order Book:
+```
+BTC-USD
+Ask: $43,250.00 (0.5 BTC available)
+Bid: $43,245.00 (0.75 BTC available)
+```
+
+Your Adjusted Order Book (shown to users):
+```
+BTC-USD
+Ask: $43,466.25  ($43,250 × 1.005)  ← User buying pays MORE
+Bid: $43,028.78  ($43,245 × 0.995)  ← User selling gets LESS
+```
+
+#### Implementation
+
+**Key files:**
+- `internal/fees/strategy.go` - Fee adjustment logic
+  - `AdjustBidPrice()` - Reduces bid price by fee amount
+  - `AdjustAskPrice()` - Increases ask price by fee amount
+- `internal/marketdata/websocket.go` - Prime WebSocket client
+- `internal/marketdata/orderbook.go` - Order book storage
+
+**Key logic:**
+1. Connect to Prime WebSocket feed
+2. Store raw order book data
+3. Apply fee adjustments when displaying prices to users
+4. For buys: increase ask price by fee
+5. For sells: decrease bid price by fee
+
+#### Running the Code
+
+```bash
+go run cmd/stream/main.go
+```
+
+**Output:**
+```
+═══════════════════════════════════════════════════
+  BTC-USD Order Book @ 14:32:15
+═══════════════════════════════════════════════════
+
+  ASK SIZE    PRIME PRICE    YOUR PRICE (incl. fee)
+  --------    -----------    ----------------------
+  0.5000      43250.00       43466.25  (+0.5%)
+  1.2000      43248.50       43464.54
+
+  BID SIZE    PRIME PRICE    YOUR PRICE (incl. fee)
+  --------    -----------    ----------------------
+  0.7500      43245.00       43028.78  (-0.5%)
+  1.5000      43243.50       43027.28
+```
+
+---
+
+### 2. Order Preview
+
+**Purpose:** Let users preview order execution **before** placing it, with all fees disclosed upfront.
+
+#### Base vs Quote Denominated Orders
+
+**Base-denominated:** Specify quantity in crypto units
+- Example: "Buy 0.5 BTC"
+- Simple: Just add fee on top
+
+**Quote-denominated:** Specify quantity in fiat units
+- Example: "Buy $100 worth of BTC"
+- Complex: Must deduct fee upfront
+
+#### Quote-Denominated Orders (The Important One)
+
+This is the tricky case that requires upfront fee deduction.
+
+**User Request:** "I want to buy $10 worth of BTC"
+
+**What Happens:**
+
+1. Calculate your markup: `$10.00 × 0.005 = $0.05`
+2. Deduct markup: `$10.00 - $0.05 = $9.95`
+3. Call Prime preview API with `$9.95`
+4. Prime responds with execution details for $9.95
+5. Return to user showing both Prime's response and your overlay
+
+**Key Insight:** You hold the full $10 from the user, send $9.95 to Prime, keep $0.05 as fee.
+
+#### Response Structure
+
+```json
+{
+  "product": "BTC-USD",
+  "side": "BUY",
+  "type": "MARKET",
+  "order_unit": "quote",
+  "user_requested_amount": "10.00",
+  "timestamp": "2025-01-15T10:30:45Z",
+
+  "raw_prime_preview": {
+    "quantity": "0.00022989",
+    "average_filled_price": "43251.25",
+    "total_value": "9.95",
+    "commission": "0.10"
+  },
+
+  "custom_fee_overlay": {
+    "fee_amount": "0.05",
+    "fee_percent": "0.50",
+    "effective_price": "43684.21"
+  }
+}
+```
+
+#### The Effective Price Calculation
+
+**Effective Price** = Total cost to user / Crypto received
+
+The effective price accounts for:
+1. The execution price from Prime
+2. Prime's commission fees
+3. Your custom markup fee
+
+**Formula:**
+```
+total_cost = (base_qty × execution_price) + prime_commission + custom_fee
+effective_price = total_cost / base_qty
+```
+
+**Example:**
+```
+User requested: $10.00
+Your fee (50 bps): $0.05
+Sent to Prime: $9.95
+Prime filled: 0.00022989 BTC at $43,251.25
+Prime commission: $0.10
+Custom fee: $0.05
+
+Total cost = (0.00022989 × 43251.25) + 0.10 + 0.05 = $10.10
+Effective price = $10.10 / 0.00022989 = $43,932.18/BTC
+```
+
+This is higher than Prime's execution price because it includes both Prime's commission and your markup.
+
+#### Implementation
+
+**Key files:**
+- `internal/order/preview.go:GeneratePreview()` - Main preview logic
+- `internal/order/utils.go:PrepareOrderRequest()` - Fee deduction logic
+
+**Preview flow:**
+1. **Prepare order** (`utils.go:107-122`)
+   - For quote orders: Calculate markup from requested amount
+   - Deduct markup: `primeAmount = userAmount - markup`
+   - Store metadata for later settlement
+
+2. **Call Prime preview API** (`preview.go:147`)
+   - Send reduced amount to Prime
+   - Prime returns execution details for the smaller order
+
+3. **Calculate custom fee overlay** (`preview.go:180`)
+   - Compute your fee based on filled quantity and execution price
+   - `customFee = qty × executionPrice × feePercent`
+
+4. **Calculate effective price** (`preview.go:183-186`)
+   - `totalCost = (qty × executionPrice) + primeCommission + customFee`
+   - `effectivePrice = totalCost / qty`
+
+---
+
+### 3. Order Placement & Tracking
+
+**Purpose:** Place actual orders and track execution via websocket.
+
+#### Placing an Order
+
+```bash
+# Quote-denominated buy (default for buys)
+go run cmd/order/main.go \
+  --symbol=BTC-USD \
+  --side=buy \
+  --qty=100 \
+  --type=market \
+  --mode=execute
+
+# Base-denominated sell (default for sells)
+go run cmd/order/main.go \
+  --symbol=ETH-USD \
+  --side=sell \
+  --qty=0.5 \
+  --type=market \
+  --mode=execute
+```
+
+#### Implementation
+
+**Key files:**
+- `internal/order/preview.go:PlaceOrder()` - Order placement logic
+- `internal/order/utils.go:PrepareOrderRequest()` - Fee deduction (same as preview)
+- `internal/orders/handler.go` - Metadata storage
+
+**Order flow:**
+1. **Prepare order** - Same logic as preview, deduct fee upfront
+   - User requests: $100
+   - Markup: $0.50
+   - Sent to Prime: $99.50
+
+2. **Send to Prime** (`preview.go:256`)
+   - Call Prime's CreateOrder API with reduced amount
+   - Prime receives `QuoteValue = "99.50"`
+
+3. **Store metadata** (`preview.go:262-268`)
+   - Save in-memory: `userRequestedAmount`, `markupAmount`, `primeOrderAmount`
+   - Websocket handler will retrieve this for settlement
+
+#### Tracking Order Execution
+
+Start the websocket client to receive real-time order updates:
+
+```bash
+go run cmd/orders-stream/main.go --symbols=BTC-USD,ETH-USD
+```
+
+**Key files:**
+- `internal/orders/websocket.go` - WebSocket client for order updates
+- `internal/orders/handler.go:HandleOrderUpdate()` - Processes order events
+
+**Websocket handler flow:**
+1. Receives order updates from Prime (status, fills, etc.)
+2. Retrieves metadata from in-memory store or database
+3. For terminal states (FILLED/CANCELLED/REJECTED):
+   - Calculates fee settlement based on actual fill
+   - Stores results in database
+4. Upserts order record with execution details
+
+---
+
+### 4. Fee Settlement (Partial Fills)
+
+**The Problem:** For quote-denominated orders, you deduct the fee upfront. If the order only partially fills, you've overcharged the customer.
+
+#### Example Scenario
+
+**User Request:** "Buy $10 worth of BTC"
+**Your Fee:** 50 basis points (0.5%)
+**Upfront Deduction:** $10.00 × 0.005 = $0.05
+**Sent to Prime:** $10.00 - $0.05 = $9.95
+
+##### Scenario A: 100% Fill (Fair)
+
+```
+Prime fills: $9.95 worth of BTC
+User paid: $10.00 total ($9.95 BTC + $0.05 fee) ✓
+You earned: $0.05
+Rebate owed: $0
+```
+
+##### Scenario B: 50% Fill (UNFAIR without settlement!)
+
+```
+Prime fills: $4.975 worth of BTC (50% of $9.95)
+User paid: $10.00 but only got $4.975 of BTC ✗
+
+Fair calculation:
+- User should pay: $5.00 total ($4.975 BTC + $0.025 fee)
+- You should earn: $0.025 (0.5% of $5.00)
+- Rebate owed: $5.00 ($4.975 unfilled + $0.025 fee rebate)
+```
+
+##### Scenario C: 0% Fill (Order Cancelled)
+
+```
+Prime fills: $0
+User paid: $10.00 but got nothing ✗
+You earned: $0
+Rebate owed: $10.00 (full refund including fee)
+```
+
+#### The Solution
+
+When an order reaches a **terminal state** (FILLED, CANCELLED, or REJECTED), calculate:
+
+1. **Actual Filled Value:** `cum_qty × avg_px` (from Prime)
+2. **Fee Rate:** `markup_amount / user_requested_amount`
+3. **Actual User Cost:** `actual_filled_value / (1 - fee_rate)`
+4. **Actual Earned Fee:** `actual_user_cost × fee_rate`
+5. **Rebate Amount:** `markup_amount - actual_earned_fee`
+
+#### Implementation
+
+**Key file:** `internal/orders/handler.go:calculateFeeSettlement()` (lines 376-460)
+
+**Algorithm:**
+1. Calculate actual filled value: `actualFilledValue = cumQty × avgPx`
+2. Calculate fee rate from original order: `feeRate = markupAmount / userRequestedAmount`
+3. Calculate what user should pay: `actualUserCost = actualFilledValue / (1 - feeRate)`
+4. Calculate actual earned fee: `actualEarnedFee = actualUserCost × feeRate`
+5. Cap at held amount: `min(actualEarnedFee, markupAmount)`
+6. Calculate rebate: `rebate = markupAmount - actualEarnedFee`
+
+#### Math Verification
+
+**50% Fill with 50 bps fee:**
+
+```
+User requested: $10.00
+Markup held: $0.05 (0.5%)
+Sent to Prime: $9.95
+Prime filled: $4.975 (50% fill)
+
+Calculation:
+  fee_rate = $0.05 / $10.00 = 0.005
+  actual_filled_value = $4.975
+  actual_user_cost = $4.975 / (1 - 0.005) = $4.975 / 0.995 = $5.00
+  actual_earned_fee = $5.00 × 0.005 = $0.025
+  rebate_amount = $0.05 - $0.025 = $0.025
+
+Result: ✓
+  User pays: $5.00 total ($4.975 BTC + $0.025 fee)
+  You earn: $0.025 (0.5% of $5.00)
+  You rebate: $5.00 to user ($4.975 unfilled + $0.025 fee rebate)
+```
+
+#### Database Schema
+
+The `orders` table includes fee settlement fields:
+
+```sql
+CREATE TABLE orders (
+    order_id TEXT PRIMARY KEY,
+
+    -- User's original request
+    user_requested_amount TEXT DEFAULT '0',
+    markup_amount TEXT DEFAULT '0',
+    prime_order_amount TEXT DEFAULT '0',
+
+    -- Fee settlement (calculated at terminal state)
+    actual_filled_value TEXT DEFAULT '0',
+    actual_earned_fee TEXT DEFAULT '0',
+    rebate_amount TEXT DEFAULT '0',
+    fee_settled BOOLEAN DEFAULT FALSE,
+
+    -- ... other fields
+);
+```
+
+#### Querying Settled Orders
+
+```sql
+-- Orders that have rebates owed
+SELECT
+    order_id,
+    status,
+    user_requested_amount,
+    markup_amount,
+    actual_filled_value,
+    actual_earned_fee,
+    rebate_amount
+FROM orders
+WHERE fee_settled = TRUE
+  AND CAST(rebate_amount AS REAL) > 0
+ORDER BY last_updated_at DESC;
+```
+
+---
+
+## Complete Integration Example
+
+Here's how to build a complete crypto trading app with marked-up fees:
+
+### Step 1: Configuration
+
+Create `config.yaml`:
+
+```yaml
+prime:
+  access_key: ${PRIME_ACCESS_KEY}
+  passphrase: ${PRIME_PASSPHRASE}
+  signing_key: ${PRIME_SIGNING_KEY}
+  portfolio: ${PRIME_PORTFOLIO}
+  service_account_id: ${PRIME_SERVICE_ACCOUNT_ID}
+
+market_data:
+  products: [BTC-USD, ETH-USD]
+  websocket_url: wss://ws-feed.prime.coinbase.com
+  max_levels: 5
+
+fees:
+  type: percent
+  percent: "0.005"  # 50 bps (0.5%)
+
+database:
+  path: orders.db
+
+server:
+  log_level: info
+  log_json: true
+```
+
+### Step 2: Show Live Prices (with Fees)
+
+**Run the market data stream:**
+```bash
+go run cmd/stream/main.go
+```
+
+**What it does:**
+- Connects to Prime WebSocket feed
+- Stores raw order book data
+- Applies your fee adjustments to displayed prices
+- Shows users prices that include your markup
+
+**See:** `cmd/stream/main.go` for full implementation
+
+### Step 3: Order Preview
+
+**Run an order preview:**
+```bash
+go run cmd/order/main.go \
+  --symbol=BTC-USD \
+  --side=buy \
+  --qty=100 \
+  --type=market \
+  --mode=preview
+```
+
+**What it does:**
+- Deducts your fee from the requested amount
+- Calls Prime's preview API with reduced amount
+- Calculates effective price including all fees
+- Returns JSON with execution details
+
+**See:** `internal/order/preview.go:GeneratePreview()` for implementation
+
+### Step 4: Place Order
+
+**Place an actual order:**
+```bash
+go run cmd/order/main.go \
+  --symbol=BTC-USD \
+  --side=buy \
+  --qty=100 \
+  --type=market \
+  --mode=execute
+```
+
+**What it does:**
+- Deducts fee upfront (same as preview)
+- Sends reduced amount to Prime
+- Stores metadata in memory for settlement
+- Returns order ID immediately
+
+**See:** `internal/order/preview.go:PlaceOrder()` for implementation
+
+### Step 5: Track Execution
+
+**Run the orders websocket stream:**
+```bash
+go run cmd/orders-stream/main.go --symbols=BTC-USD,ETH-USD
+```
+
+**What it does:**
+- Connects to Prime orders WebSocket feed
+- Receives real-time order updates
+- Calculates fee settlement for terminal states
+- Stores execution details and rebates in SQLite
+
+**See:** `cmd/orders-stream/main.go` and `internal/orders/handler.go` for implementation
+
+### Step 6: Check Rebates
+
+Query the database to see fee settlements:
+
+```sql
+SELECT
+    order_id,
+    status,
+    user_requested_amount,
+    actual_filled_value,
+    actual_earned_fee,
+    rebate_amount
+FROM orders
+WHERE fee_settled = TRUE
+  AND CAST(rebate_amount AS REAL) > 0
+ORDER BY last_updated_at DESC;
+```
+
+---
+
+## Testing & Verification
+
+### Fee Settlement Examples
+
+The fee settlement logic handles three scenarios:
+
+**Example 1: 100% Fill (Full Execution)**
+```
+User requested: $10.00
+Fee held upfront: $0.05 (50 bps)
+Prime filled: $9.95 (100%)
+
+Settlement:
+  → Earned fee: $0.05
+  → Rebate: $0.00 (no refund needed)
+```
+
+**Example 2: 50% Fill (Partial Execution)**
+```
+User requested: $10.00
+Fee held upfront: $0.05 (50 bps)
+Prime filled: $4.98 (50%)
+
+Settlement:
+  → Earned fee: $0.025 (0.5% of $5.00 actual cost)
+  → Rebate: $0.025 (refund unfilled portion)
+  → User pays: $5.00 total ($4.975 BTC + $0.025 fee)
+```
+
+**Example 3: 0% Fill (Order Cancelled)**
+```
+User requested: $10.00
+Fee held upfront: $0.05 (50 bps)
+Prime filled: $0.00 (0%)
+
+Settlement:
+  → Earned fee: $0.00
+  → Rebate: $0.05 (full refund including fee)
+```
+
+### Manual Testing Checklist
+
+**Market Data:**
+- [ ] Raw Prime prices stream correctly
+- [ ] Buy prices adjusted UP by fee percentage
+- [ ] Sell prices adjusted DOWN by fee percentage
+- [ ] Spreads widen appropriately
+
+**Order Preview:**
+- [ ] Quote-denominated preview deducts fee upfront
+- [ ] Base-denominated preview adds fee on top
+- [ ] Response shows user_requested_amount correctly
+- [ ] Effective price includes all fees
+
+**Order Placement:**
+- [ ] Metadata stored in database before order sent
+- [ ] Prime receives reduced amount (user_amount - markup)
+- [ ] Order ID tracked correctly
+
+**Fee Settlement:**
+- [ ] 100% fills earn full fee, no rebate
+- [ ] Partial fills earn proportional fee
+- [ ] Cancelled orders rebate full amount
+- [ ] Database tracks settlement correctly
+
+### SQL Verification Queries
+
+```sql
+-- Verify fee math for recent orders
+SELECT
+    order_id,
+    user_requested_amount,
+    markup_amount,
+    actual_filled_value,
+    actual_earned_fee,
+    rebate_amount,
+    -- Verify math: earned_fee + rebate = markup
+    CASE
+        WHEN ABS(
+            CAST(markup_amount AS REAL) -
+            (CAST(actual_earned_fee AS REAL) + CAST(rebate_amount AS REAL))
+        ) < 0.01 THEN 'OK'
+        ELSE 'ERROR'
+    END as math_check
+FROM orders
+WHERE fee_settled = TRUE
+ORDER BY last_updated_at DESC
+LIMIT 10;
+```
+
+---
+
+## Summary
+
+You now know how to build a complete fee passthrough layer on Prime:
+
+1. **Market Data** - Show fee-adjusted prices to users
+2. **Order Preview** - Deduct fees upfront for quote orders
+3. **Order Placement** - Store metadata for settlement
+4. **Fee Settlement** - Fairly rebate partial fills
+5. **Testing** - Verify all scenarios work correctly
+
+### API Documentation
+
+- [Prime API Docs](https://docs.cdp.coinbase.com/prime/docs)
+- [Prime Go SDK](https://github.com/coinbase-samples/prime-sdk-go)

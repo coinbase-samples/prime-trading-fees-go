@@ -1,0 +1,179 @@
+/**
+ * Copyright 2025-present Coinbase Global, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package order
+
+import (
+	"fmt"
+
+	"github.com/coinbase-samples/prime-sdk-go/model"
+	"github.com/coinbase-samples/prime-sdk-go/orders"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+)
+
+// NormalizeSide converts "buy"/"sell" to uppercase "BUY"/"SELL"
+func NormalizeSide(side string) string {
+	switch side {
+	case "buy", "BUY":
+		return "BUY"
+	case "sell", "SELL":
+		return "SELL"
+	default:
+		return side
+	}
+}
+
+// NormalizeOrderType converts "market"/"limit" to uppercase "MARKET"/"LIMIT"
+func NormalizeOrderType(orderType string) string {
+	switch orderType {
+	case "market", "MARKET":
+		return "MARKET"
+	case "limit", "LIMIT":
+		return "LIMIT"
+	default:
+		return orderType
+	}
+}
+
+// OrderMetadata contains calculated fee information for quote-denominated orders
+type OrderMetadata struct {
+	UserRequestedAmount decimal.Decimal
+	MarkupAmount        decimal.Decimal
+	PrimeOrderAmount    decimal.Decimal
+}
+
+// PreparedOrder contains the Prime API request and associated metadata
+type PreparedOrder struct {
+	PrimeRequest  *orders.CreateOrderRequest
+	Metadata      *OrderMetadata
+	NormalizedReq NormalizedOrderRequest
+}
+
+// NormalizedOrderRequest contains the normalized request parameters
+type NormalizedOrderRequest struct {
+	Product       string
+	Side          string // Already normalized to uppercase
+	Type          string // Already normalized to uppercase
+	ClientOrderId string // Generated UUID
+}
+
+// PrepareOrderRequest builds a Prime API order request from user input
+// This consolidates the logic shared between preview and execution
+func PrepareOrderRequest(
+	req OrderRequest,
+	portfolioId string,
+	priceAdjuster *fees.PriceAdjuster,
+	generateClientOrderId bool,
+) (*PreparedOrder, error) {
+	// Normalize side and type
+	normalizedSide := NormalizeSide(req.Side)
+	normalizedType := NormalizeOrderType(req.Type)
+
+	// Generate client order Id if needed (for actual orders, not previews)
+	clientOrderId := ""
+	if generateClientOrderId {
+		clientOrderId = uuid.New().String()
+	}
+
+	// Build base Prime request
+	primeReq := &orders.CreateOrderRequest{
+		Order: &model.Order{
+			PortfolioId:   portfolioId,
+			ProductId:     req.Product,
+			Side:          normalizedSide,
+			Type:          normalizedType,
+			ClientOrderId: clientOrderId,
+		},
+	}
+
+	// Calculate metadata for quote-denominated orders
+	var metadata *OrderMetadata
+
+	if req.Unit == "quote" && !req.QuoteValue.IsZero() {
+		// Calculate our markup fee on the requested notional amount
+		// For a $10 order with 0.5% markup: fee = $10 * 0.005 = $0.05
+		userRequestedAmount := req.QuoteValue
+		markupAmount := priceAdjuster.FeeStrategy.ComputeFromNotional(req.QuoteValue)
+
+		// Deduct our markup from the amount sent to Prime
+		// User wants $10 worth, we send $9.95 to Prime, keep $0.05
+		primeOrderAmount := req.QuoteValue.Sub(markupAmount)
+		primeReq.Order.QuoteValue = primeOrderAmount.String()
+
+		metadata = &OrderMetadata{
+			UserRequestedAmount: userRequestedAmount,
+			MarkupAmount:        markupAmount,
+			PrimeOrderAmount:    primeOrderAmount,
+		}
+	} else if req.Unit == "base" && !req.BaseQty.IsZero() {
+		primeReq.Order.BaseQuantity = req.BaseQty.String()
+	}
+
+	// Add price for limit orders
+	if !req.Price.IsZero() {
+		primeReq.Order.LimitPrice = req.Price.String()
+	}
+
+	return &PreparedOrder{
+		PrimeRequest: primeReq,
+		Metadata:     metadata,
+		NormalizedReq: NormalizedOrderRequest{
+			Product:       req.Product,
+			Side:          normalizedSide,
+			Type:          normalizedType,
+			ClientOrderId: clientOrderId,
+		},
+	}, nil
+}
+
+// RoundPrice rounds a price to 2 decimal places for USD
+func RoundPrice(d decimal.Decimal) string {
+	return d.Round(2).String()
+}
+
+// RoundQty rounds a quantity to 8 decimal places for crypto
+func RoundQty(d decimal.Decimal) string {
+	return d.Round(8).String()
+}
+
+// ValidateOrderRequest validates common order request parameters
+func ValidateOrderRequest(req OrderRequest) error {
+	if req.Product == "" {
+		return fmt.Errorf("product is required")
+	}
+
+	side := req.Side
+	if side != "BUY" && side != "SELL" && side != "buy" && side != "sell" {
+		return fmt.Errorf("side must be BUY or SELL")
+	}
+
+	// Check quantity based on unit type
+	if req.Unit == "quote" {
+		if req.QuoteValue.IsZero() || req.QuoteValue.IsNegative() {
+			return fmt.Errorf("quote value must be positive")
+		}
+	} else if req.Unit == "base" {
+		if req.BaseQty.IsZero() || req.BaseQty.IsNegative() {
+			return fmt.Errorf("base quantity must be positive")
+		}
+	} else {
+		return fmt.Errorf("quantity must be specified")
+	}
+
+	return nil
+}
