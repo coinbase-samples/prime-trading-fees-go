@@ -22,19 +22,21 @@ A comprehensive guide for integrating Coinbase Prime with custom fee markup.
 This guide teaches you how to build a **fee passthrough layer** on top of Coinbase Prime by:
 
 1. **Adjusting market prices** - Show fee-inclusive prices to users
-2. **Deducting fees upfront** - Reduce order amounts before sending to Prime
+2. **Applying fees** - Charge your markup using one of two models
 3. **Tracking execution** - Monitor fills via WebSocket
-4. **Settling partial fills** - Calculate fair rebates for unfilled portions
+4. **Settling partial fills** - Calculate fair rebates when needed
 
 ---
 
 ## Business Model
 
-### The "Fee Hold" Model
+### Two Fee Models (Depends on Order Type)
 
-**Core Concept:** Deduct fees BEFORE sending orders to Prime, not after.
+Your fee calculation depends on how the user specifies their order:
 
-**Example:** User wants to buy $100 of BTC at 50 bps (0.5%) fee:
+#### Quote Orders: "Buy $100 of BTC" → Fee Hold Model
+
+**Deduct fee BEFORE sending to Prime:**
 ```
 1. User provides: $100
 2. You hold as fee: $0.50 (0.5%)
@@ -42,11 +44,43 @@ This guide teaches you how to build a **fee passthrough layer** on top of Coinba
 4. User receives: ~$99.50 worth of BTC
 ```
 
-**Why upfront?** The alternative (charging after execution) requires:
-- Fractional BTC splitting, or
-- Separate billing/settlement
+**Why deduct upfront?** Because the user specified a dollar amount. If you charged after, you'd need to either:
+- Split the BTC fractionally, or
+- Bill them separately
 
-Both add operational complexity with no benefit
+Both are messy.
+
+#### Base Orders: "Buy 1 BTC" → Add-On Model
+
+**Charge fee AFTER Prime execution:**
+```
+1. User requests: 1 BTC
+2. Send to Prime: 1 BTC
+3. Prime fills at: $43,250
+4. Your fee: $43,250 × 0.005 = $216.25
+5. User pays: $43,466.25 total
+```
+
+**Why charge after?** Because the user specified a crypto amount. You know exactly what they're getting (1 BTC), so you just add your fee on top of Prime's cost.
+
+### Industry Convention: Buys in Quote, Sells in Base
+
+In practice, crypto trading platforms typically default to:
+- **Buy orders** → Quote-denominated ("Buy $100 of BTC")
+- **Sell orders** → Base-denominated ("Sell 0.5 BTC")
+
+**Why this convention?** It aligns with how users naturally think about trading:
+- When buying crypto, users ask: *"How much USD do I want to spend?"*
+- When selling crypto, users ask: *"How much BTC do I want to sell?"*
+
+**Bonus benefit:** This convention means each order type consistently uses one fee model:
+- Buys (quote) → Always use Fee Hold Model
+- Sells (base) → Always use Add-On Model
+
+This simplification makes the user experience more predictable and the implementation cleaner.
+
+**Implementation:** See `cmd/order/main.go:130-138` for the smart defaults logic.
+
 ---
 
 ## Fee Calculation Fundamentals
@@ -113,8 +147,8 @@ Bid: $43,245.00 (0.75 BTC available)
 Your Adjusted Order Book (shown to users):
 ```
 BTC-USD
-Ask: $43,466.25  ($43,250 × 1.005)  ← User buying pays more
-Bid: $43,028.78  ($43,245 × 0.995)  ← User selling gets less
+Ask: $43,466.25  ($43,250 × 1.005)
+Bid: $43,028.78  ($43,245 × 0.995)
 ```
 
 #### Implementation
@@ -160,11 +194,21 @@ go run cmd/stream/main.go
 
 ### 2. Order Preview
 
-**Purpose:** Let users see execution details before placing orders.
+**Purpose:** Coinbase Prime includes a REST API that allows users to see execution details before placing orders.
 
-#### Quote-Denominated Orders
+#### Two Order Types: Base vs Quote
 
-For "buy $X worth of BTC" orders, the fee hold happens here:
+**Quote-Denominated:** "Buy $100 worth of BTC"
+- User specifies dollar amount
+- Fee deducted BEFORE sending to Prime
+- Example: Hold $0.50 fee, send $99.50 to Prime
+
+**Base-Denominated:** "Buy 1 BTC"
+- User specifies crypto amount
+- Fee charged AFTER execution (on top of Prime's cost)
+- Example: Prime fills 1 BTC for $43,250 + $43.25 fee = User pays $43,293.25
+
+#### Quote-Denominated Example
 
 **User Request:** "Buy $10 of BTC" (50 bps fee)
 
@@ -173,6 +217,18 @@ For "buy $X worth of BTC" orders, the fee hold happens here:
 2. Send to Prime preview: `$9.95`
 3. Prime returns execution details for $9.95
 4. Calculate effective price including your fee
+
+#### Base-Denominated Example
+
+**User Request:** "Buy 1 BTC" (50 bps fee)
+
+**Processing:**
+1. Send full quantity to Prime: `1 BTC`
+2. Prime returns execution cost: `$43,250`
+3. Calculate your fee: `$43,250 × 0.005 = $216.25`
+4. User pays total: `$43,250 + $216.25 = $43,466.25`
+
+**Key Difference:** With base orders, you charge the fee on TOP of Prime's execution cost. No upfront hold needed.
 
 #### Response Structure
 
@@ -230,35 +286,11 @@ Effective price = $10.10 / 0.00022989 = $43,932.18/BTC
 
 This is higher than Prime's execution price because it includes both Prime's commission and your markup.
 
-#### Implementation
-
-**Key files:**
-- `internal/order/preview.go:GeneratePreview()` - Main preview logic
-- `internal/order/utils.go:PrepareOrderRequest()` - Fee deduction logic
-
-**Preview flow:**
-1. **Prepare order** (`utils.go:107-122`)
-   - For quote orders: Calculate markup from requested amount
-   - Deduct markup: `primeAmount = userAmount - markup`
-   - Store metadata for later settlement
-
-2. **Call Prime preview API** (`preview.go:147`)
-   - Send reduced amount to Prime
-   - Prime returns execution details for the smaller order
-
-3. **Calculate custom fee overlay** (`preview.go:180`)
-   - Compute your fee based on filled quantity and execution price
-   - `customFee = qty × executionPrice × feePercent`
-
-4. **Calculate effective price** (`preview.go:183-186`)
-   - `totalCost = (qty × executionPrice) + primeCommission + customFee`
-   - `effectivePrice = totalCost / qty`
-
 ---
 
 ### 3. Order Placement & Tracking
 
-**Purpose:** Place actual orders and track execution via websocket.
+**Purpose:** Place actual orders and track execution via WebSocket.
 
 #### Placing an Order
 
@@ -288,9 +320,9 @@ go run cmd/order/main.go \
 - `internal/orders/handler.go` - Metadata storage
 
 **Order flow:**
-1. **Prepare** - Same fee hold logic as preview
-2. **Send to Prime** (`preview.go:256`) - Place order with reduced amount
-3. **Store metadata** (`preview.go:262-268`) - Save fee hold details for settlement
+1. **Prepare** - Apply fee logic (deduct for quote, add for base)
+2. **Send to Prime** - Place order with Prime API
+3. **Store metadata** - Save fee details for settlement
 
 #### Tracking Order Execution
 
@@ -315,6 +347,8 @@ go run cmd/orders-stream/main.go --symbols=BTC-USD,ETH-USD
 ---
 
 ### 4. Fee Settlement - Releasing the Hold
+
+**Applies to:** Quote-denominated orders only (base orders charge on top, so no settlement needed)
 
 **The Problem:** You held a fee based on the full order, but partial fills mean you overcharged.
 
@@ -362,7 +396,7 @@ When an order reaches a **terminal state** (FILLED, CANCELLED, or REJECTED):
 
 #### Implementation
 
-**Key file:** `internal/orders/handler.go:calculateFeeSettlement()` (lines 376-460)
+**Key file:** `internal/orders/handler.go:calculateFeeSettlement()`
 
 **Algorithm:**
 1. Calculate actual filled value: `actualFilledValue = cumQty × avgPx`
