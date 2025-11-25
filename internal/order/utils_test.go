@@ -19,6 +19,7 @@ package order
 import (
 	"testing"
 
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/shopspring/decimal"
 )
@@ -41,9 +42,9 @@ func TestNormalizeSide(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := NormalizeSide(tt.input)
+			result := common.NormalizeSide(tt.input)
 			if result != tt.expected {
-				t.Errorf("NormalizeSide(%q) = %q, want %q", tt.input, result, tt.expected)
+				t.Errorf("common.NormalizeSide(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -69,9 +70,9 @@ func TestNormalizeOrderType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := NormalizeOrderType(tt.input)
+			result := common.NormalizeOrderType(tt.input)
 			if result != tt.expected {
-				t.Errorf("NormalizeOrderType(%q) = %q, want %q", tt.input, result, tt.expected)
+				t.Errorf("common.NormalizeOrderType(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -308,11 +309,11 @@ func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 			if prepared.PrimeRequest.Order.ProductId != tt.req.Product {
 				t.Errorf("ProductId = %q, want %q", prepared.PrimeRequest.Order.ProductId, tt.req.Product)
 			}
-			if prepared.PrimeRequest.Order.Side != NormalizeSide(tt.req.Side) {
-				t.Errorf("Side = %q, want %q", prepared.PrimeRequest.Order.Side, NormalizeSide(tt.req.Side))
+			if prepared.PrimeRequest.Order.Side != common.NormalizeSide(tt.req.Side) {
+				t.Errorf("Side = %q, want %q", prepared.PrimeRequest.Order.Side, common.NormalizeSide(tt.req.Side))
 			}
-			if prepared.PrimeRequest.Order.Type != NormalizeOrderType(tt.req.Type) {
-				t.Errorf("Type = %q, want %q", prepared.PrimeRequest.Order.Type, NormalizeOrderType(tt.req.Type))
+			if prepared.PrimeRequest.Order.Type != common.NormalizeOrderType(tt.req.Type) {
+				t.Errorf("Type = %q, want %q", prepared.PrimeRequest.Order.Type, common.NormalizeOrderType(tt.req.Type))
 			}
 
 			// Check client order ID generation

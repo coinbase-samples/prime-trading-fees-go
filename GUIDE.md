@@ -11,7 +11,8 @@ A comprehensive guide for integrating Coinbase Prime with custom fee markup.
   - [1. Market Data with Fee-Adjusted Prices](#1-market-data-with-fee-adjusted-prices)
   - [2. Order Preview](#2-order-preview)
   - [3. Order Placement & Tracking](#3-order-placement--tracking)
-  - [4. Fee Settlement (Partial Fills)](#4-fee-settlement-partial-fills)
+  - [4. Request For Quote (RFQ)](#4-request-for-quote-rfq)
+  - [5. Fee Settlement (Partial Fills)](#5-fee-settlement-partial-fills)
 - [Complete Integration Example](#complete-integration-example)
 - [Testing & Verification](#testing--verification)
 
@@ -48,8 +49,6 @@ Your fee calculation depends on how the user specifies their order:
 - Split the BTC fractionally, or
 - Bill them separately
 
-Both are messy.
-
 #### Base Orders: "Buy 1 BTC" → Add-On Model
 
 **Charge fee AFTER Prime execution:**
@@ -65,7 +64,7 @@ Both are messy.
 
 ### Industry Convention: Buys in Quote, Sells in Base
 
-In practice, crypto trading platforms typically default to:
+In practice, platforms who have integrated Prime typically default to:
 - **Buy orders** → Quote-denominated ("Buy $100 of BTC")
 - **Sell orders** → Base-denominated ("Sell 0.5 BTC")
 
@@ -78,8 +77,6 @@ In practice, crypto trading platforms typically default to:
 - Sells (base) → Always use Add-On Model
 
 This simplification makes the user experience more predictable and the implementation cleaner.
-
-**Implementation:** See `cmd/order/main.go:130-138` for the smart defaults logic.
 
 ---
 
@@ -106,12 +103,6 @@ fee = notional_value × fee_percent
 # In .env file:
 FEE_PERCENT=0.005  # 50 bps (0.5%)
 ```
-
-**Common fee levels:**
-- 10 bps (0.1%): `FEE_PERCENT=0.001`
-- 20 bps (0.2%): `FEE_PERCENT=0.002`
-- 50 bps (0.5%): `FEE_PERCENT=0.005`
-- 100 bps (1.0%): `FEE_PERCENT=0.01`
 
 ---
 
@@ -170,7 +161,7 @@ Bid: $43,028.78  ($43,245 × 0.995)
 #### Running the Code
 
 ```bash
-go run cmd/stream/main.go
+go run cmd/stream/main.go --symbols=BTC-USD,ETH-USD
 ```
 
 **Output:**
@@ -295,22 +286,17 @@ This is higher than Prime's execution price because it includes both Prime's com
 #### Placing an Order
 
 ```bash
-# Quote-denominated buy (default for buys)
-go run cmd/order/main.go \
-  --symbol=BTC-USD \
-  --side=buy \
-  --qty=100 \
-  --type=market \
-  --mode=execute
+# Quote-denominated market buy
+go run cmd/order/main.go --symbol=BTC-USD --side=buy --unit=quote --qty=10 --type=market
 
-# Base-denominated sell (default for sells)
-go run cmd/order/main.go \
-  --symbol=ETH-USD \
-  --side=sell \
-  --qty=0.5 \
-  --type=market \
-  --mode=execute
+# Quote-denominated limit buy
+go run cmd/order/main.go --symbol=BTC-USD --side=buy --unit=quote --qty=10 --price 40000 --type=limit           
+
+# Base-denominated market sell
+go run cmd/order/main.go --symbol=BTC-USD --side=sell --qty=0.001 --type=market
 ```
+
+Note that on buys, the default unit is `quote` and on sells, the default unit is `base`. This aligns with common implementation patterns. Additionally, the default order type is always `market` unless type is specified otherwise. 
 
 #### Implementation
 
@@ -346,9 +332,90 @@ go run cmd/orders-stream/main.go --symbols=BTC-USD,ETH-USD
 
 ---
 
-### 4. Fee Settlement - Releasing the Hold
+### 4. Request For Quote (RFQ)
 
-**Applies to:** Quote-denominated orders only (base orders charge on top, so no settlement needed)
+**Purpose:** Get a guaranteed price quote before executing a trade. Unlike market orders that execute immediately, RFQ provides price certainty. Common implementation path for clients who wish to avoid maintaining an order book or care most about clean user execution. 
+
+#### How RFQ Works
+
+1. **Create Quote** - Request a guaranteed price from Prime with a limit price
+2. **Review Quote** - Receive quote with best price, total cost, and expiration time (~2.5s from receipt of quote)
+3. **Accept Quote** (optional) - Execute the trade at the quoted price before expiration
+
+#### Creating a Quote
+
+**Command:**
+```bash
+# Quote-denominated: Buy $1000 of BTC at limit price $88,000
+go run cmd/rfq/main.go --symbol=BTC-USD --side=buy --qty=1000 --price=88000
+
+# Base-denominated: Sell 0.5 BTC at limit price $43,000
+go run cmd/rfq/main.go --symbol=BTC-USD --side=sell --qty=0.5 --price=43000 --auto-accept
+```
+
+**Fee Application (Same as Regular Orders):**
+
+**Quote Orders:** Fee held upfront
+```
+User requests: $1000
+Fee held: $5 (0.5%)
+Sent to Prime: $995
+```
+
+**Base Orders:** Fee added on top
+```
+User requests: 0.5 BTC
+Sent to Prime: 0.5 BTC
+Prime cost: $21,500
+Your fee: $107.50 (0.5% of $21,500)
+Total user pays: $21,607.50
+```
+
+#### Response Structure
+
+```json
+{
+  "quote_id": "uuid",
+  "product": "BTC-USD",
+  "side": "BUY",
+  "expiration_time": "2025-01-15T10:35:45Z",
+  "unit": "quote",
+  "user_requested_amount": "1000",
+  "raw_prime_quote": {
+    "best_price": "87950.00",
+    "order_total": "995.00",
+    "price_inclusive_of_fees": "88100.00"
+  },
+  "custom_fee_overlay": {
+    "fee_amount": "5.00",
+    "fee_percent": "0.50",
+    "effective_price": "88396.23",
+    "total_cost": "1000.00"
+  }
+}
+```
+
+#### Implementation
+
+**Key files:**
+- `internal/rfq/service.go` - RFQ quote creation and acceptance
+- `internal/rfq/models.go` - RFQ request/response structures
+- `cmd/rfq/main.go` - CLI command with `--auto-accept` flag
+
+**RFQ flow:**
+1. **Validate** - Ensure limit price is provided and marketable
+2. **Apply fees** - Deduct for quote orders, full amount for base orders
+3. **Create quote** - Call Prime RFQ API with adjusted amounts
+4. **Build response** - Calculate effective price including markup
+5. **Accept (optional)** - If `--auto-accept`, immediately execute trade
+
+**Note:** RFQ does not use WebSocket tracking. Quote acceptance returns an order ID that can be tracked via REST API.
+
+---
+
+### 5. Fee Settlement - Releasing the Hold
+
+**Applies to:** Quote-denominated orders only (base orders charge on top, so no handling needed)
 
 **The Problem:** You held a fee based on the full order, but partial fills mean you overcharged.
 
@@ -469,121 +536,6 @@ WHERE fee_settled = TRUE
   AND CAST(rebate_amount AS REAL) > 0
 ORDER BY last_updated_at DESC;
 ```
-
----
-
-## Complete Integration Example
-
-Here's how to build a complete crypto trading app with marked-up fees:
-
-### Step 1: Configuration
-
-All configuration is managed through environment variables in your `.env` file:
-
-```bash
-# Prime API Credentials (Required)
-PRIME_ACCESS_KEY=your_access_key
-PRIME_PASSPHRASE=your_passphrase
-PRIME_SIGNING_KEY=your_signing_key
-PRIME_PORTFOLIO=your_portfolio_id
-PRIME_SERVICE_ACCOUNT_ID=your_service_account_id
-
-# Market Data Configuration
-MARKET_DATA_WEBSOCKET_URL=wss://ws-feed.prime.coinbase.com
-MARKET_DATA_PRODUCTS=BTC-USD,ETH-USD
-MARKET_DATA_MAX_LEVELS=5
-MARKET_DATA_RECONNECT_DELAY=5s
-MARKET_DATA_INITIAL_WAIT_TIME=2s
-MARKET_DATA_DISPLAY_UPDATE_RATE=5s
-
-# Fee Configuration
-FEE_TYPE=percent
-FEE_PERCENT=0.005  # 50 bps (0.5%)
-
-# Server Configuration
-LOG_LEVEL=info
-LOG_JSON=true
-
-# Database Configuration
-DATABASE_PATH=orders.db
-```
-
-### Step 2: Show Live Prices (with Fees)
-
-**Run the market data stream:**
-```bash
-go run cmd/stream/main.go
-```
-
-**What it does:**
-- Connects to Prime WebSocket feed
-- Stores raw order book data
-- Applies your fee adjustments to displayed prices
-- Shows users prices that include your markup
-
-**See:** `cmd/stream/main.go` for full implementation
-
-### Step 3: Order Preview
-
-**Run an order preview:**
-```bash
-go run cmd/order/main.go \
-  --symbol=BTC-USD \
-  --side=buy \
-  --qty=100 \
-  --type=market \
-  --mode=preview
-```
-
-**See:** `internal/order/preview.go:GeneratePreview()` for implementation
-
-### Step 4: Place Order
-
-**Place an actual order:**
-```bash
-go run cmd/order/main.go \
-  --symbol=BTC-USD \
-  --side=buy \
-  --qty=100 \
-  --type=market \
-  --mode=execute
-```
-
-**See:** `internal/order/preview.go:PlaceOrder()` for implementation
-
-### Step 5: Track Execution
-
-**Run the orders websocket stream:**
-```bash
-go run cmd/orders-stream/main.go --symbols=BTC-USD,ETH-USD
-```
-
-**What it does:**
-- Connects to Prime orders WebSocket feed
-- Receives real-time order updates
-- Calculates fee settlement for terminal states
-- Stores execution details and rebates in SQLite
-
-**See:** `cmd/orders-stream/main.go` and `internal/orders/handler.go` for implementation
-
-### Step 6: Check Rebates
-
-Query the database to see fee settlements:
-
-```sql
-SELECT
-    order_id,
-    status,
-    user_requested_amount,
-    actual_filled_value,
-    actual_earned_fee,
-    rebate_amount
-FROM orders
-WHERE fee_settled = TRUE
-  AND CAST(rebate_amount AS REAL) > 0
-ORDER BY last_updated_at DESC;
-```
-
 ---
 
 ## Testing & Verification
@@ -600,7 +552,6 @@ ORDER BY last_updated_at DESC;
 - [ ] Quote orders: fee held upfront, reduced amount sent to Prime
 - [ ] Response shows user_requested_amount correctly
 - [ ] Effective price includes all fees
-- [ ] Metadata stored before order sent
 
 **Fee Settlement:**
 - [ ] 100% fills earn full fee, no rebate
@@ -632,18 +583,6 @@ WHERE fee_settled = TRUE
 ORDER BY last_updated_at DESC
 LIMIT 10;
 ```
-
----
-
-## Summary
-
-You now know how to build a complete fee passthrough layer on Prime:
-
-1. **Market Data** - Show fee-adjusted prices to users
-2. **Order Preview** - Deduct fees upfront for quote orders
-3. **Order Placement** - Store metadata for settlement
-4. **Fee Settlement** - Fairly rebate partial fills
-5. **Testing** - Verify all scenarios work correctly
 
 ### API Documentation
 

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/database"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/order"
@@ -121,7 +122,7 @@ func parseAndValidateFlags() (*parsedFlags, error) {
 	}
 
 	// Normalize and validate side
-	sideUpper := order.NormalizeSide(*side)
+	sideUpper := common.NormalizeSide(*side)
 	if sideUpper != "BUY" && sideUpper != "SELL" {
 		return nil, fmt.Errorf("--side must be 'buy' or 'sell', got: %s", *side)
 	}
@@ -147,7 +148,7 @@ func parseAndValidateFlags() (*parsedFlags, error) {
 	}
 
 	// Normalize and validate order type
-	typeUpper := order.NormalizeOrderType(*orderType)
+	typeUpper := common.NormalizeOrderType(*orderType)
 	if typeUpper != "MARKET" && typeUpper != "LIMIT" {
 		return nil, fmt.Errorf("--type must be 'market' or 'limit', got: %s", *orderType)
 	}

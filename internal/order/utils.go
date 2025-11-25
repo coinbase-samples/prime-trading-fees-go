@@ -21,34 +21,11 @@ import (
 
 	"github.com/coinbase-samples/prime-sdk-go/model"
 	"github.com/coinbase-samples/prime-sdk-go/orders"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
-
-// NormalizeSide converts "buy"/"sell" to uppercase "BUY"/"SELL"
-func NormalizeSide(side string) string {
-	switch side {
-	case "buy", "BUY":
-		return "BUY"
-	case "sell", "SELL":
-		return "SELL"
-	default:
-		return side
-	}
-}
-
-// NormalizeOrderType converts "market"/"limit" to uppercase "MARKET"/"LIMIT"
-func NormalizeOrderType(orderType string) string {
-	switch orderType {
-	case "market", "MARKET":
-		return "MARKET"
-	case "limit", "LIMIT":
-		return "LIMIT"
-	default:
-		return orderType
-	}
-}
 
 // OrderMetadata contains calculated fee information for quote-denominated orders
 type OrderMetadata struct {
@@ -81,8 +58,8 @@ func PrepareOrderRequest(
 	generateClientOrderId bool,
 ) (*PreparedOrder, error) {
 	// Normalize side and type
-	normalizedSide := NormalizeSide(req.Side)
-	normalizedType := NormalizeOrderType(req.Type)
+	normalizedSide := common.NormalizeSide(req.Side)
+	normalizedType := common.NormalizeOrderType(req.Type)
 
 	// Generate client order Id if needed (for actual orders, not previews)
 	clientOrderId := ""

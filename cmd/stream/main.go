@@ -17,9 +17,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -31,7 +33,13 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	symbols = flag.String("symbols", "BTC-USD,ETH-USD", "Comma-separated list of product symbols to stream")
+)
+
 func main() {
+	flag.Parse()
+
 	// Load .env file
 	_ = godotenv.Load()
 
@@ -52,7 +60,20 @@ func run() error {
 	config.SetupLogger(cfg.Server.LogLevel, cfg.Server.LogJson)
 	defer zap.L().Sync()
 
-	fmt.Printf("Starting market data stream for %v\n", cfg.MarketData.Products)
+	// Parse symbols from command-line flag
+	products := []string{}
+	if *symbols != "" {
+		products = strings.Split(*symbols, ",")
+		for i := range products {
+			products[i] = strings.TrimSpace(products[i])
+		}
+	}
+
+	if len(products) == 0 {
+		return fmt.Errorf("at least one product symbol is required")
+	}
+
+	fmt.Printf("Starting market data stream for %v\n", products)
 	fmt.Printf("Display updates every 5 seconds. Press Ctrl+C to stop.\n\n")
 
 	// Initialize components
@@ -74,7 +95,7 @@ func run() error {
 		SigningKey:       cfg.Prime.SigningKey,
 		ServiceAccountId: cfg.Prime.ServiceAccountId,
 		Portfolio:        cfg.Prime.Portfolio,
-		Products:         cfg.MarketData.Products,
+		Products:         products,
 		MaxLevels:        cfg.MarketData.MaxLevels,
 		ReconnectDelay:   cfg.MarketData.ReconnectDelay,
 	}
@@ -103,7 +124,7 @@ func run() error {
 			fmt.Print("\033[2J\033[H")
 
 			hasData := false
-			for _, product := range cfg.MarketData.Products {
+			for _, product := range products {
 				book, exists := store.Get(product)
 				if !exists {
 					continue
