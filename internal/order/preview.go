@@ -25,6 +25,7 @@ import (
 	"github.com/coinbase-samples/prime-sdk-go/credentials"
 	"github.com/coinbase-samples/prime-sdk-go/orders"
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -63,14 +64,14 @@ func NewOrderServiceWithPrime(cfg *config.Config, priceAdjuster *fees.PriceAdjus
 }
 
 // GeneratePreview creates a complete order preview using Prime REST API
-func (s *OrderService) GeneratePreview(ctx context.Context, req OrderRequest) (*OrderPreviewResponse, error) {
+func (s *OrderService) GeneratePreview(ctx context.Context, req common.OrderRequest) (*common.OrderPreviewResponse, error) {
 	// Validate request
-	if err := ValidateOrderRequest(req); err != nil {
+	if err := common.ValidateOrderRequest(req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
 	// Prepare order request with fee calculations
-	prepared, err := PrepareOrderRequest(req, s.portfolioId, s.priceAdjuster, false)
+	prepared, err := common.PrepareOrderRequest(req, s.portfolioId, s.priceAdjuster, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare order: %w", err)
 	}
@@ -113,11 +114,11 @@ func (s *OrderService) GeneratePreview(ctx context.Context, req OrderRequest) (*
 	}
 
 	// Build raw Prime preview (what Prime returns)
-	rawPreview := &RawPrimePreview{
-		Quantity:           RoundQty(baseQty),
-		AverageFilledPrice: RoundPrice(executionPrice),
-		TotalValue:         RoundPrice(decimal.RequireFromString(order.Total)),
-		Commission:         RoundPrice(primeFee),
+	rawPreview := &common.RawPrimePreview{
+		Quantity:           common.RoundQty(baseQty),
+		AverageFilledPrice: common.RoundPrice(executionPrice),
+		TotalValue:         common.RoundPrice(decimal.RequireFromString(order.Total)),
+		Commission:         common.RoundPrice(primeFee),
 	}
 
 	// Calculate custom fee (our markup) on top of Prime's execution
@@ -131,22 +132,22 @@ func (s *OrderService) GeneratePreview(ctx context.Context, req OrderRequest) (*
 	}
 
 	// Build custom fee overlay (our calculations)
-	var customOverlay *CustomFeeOverlay
+	var customOverlay *common.CustomFeeOverlay
 	if !customFee.IsZero() {
 		notional := baseQty.Mul(executionPrice)
 		feePercent := decimal.Zero
 		if !notional.IsZero() {
 			feePercent = customFee.Div(notional).Mul(decimal.NewFromInt(100))
 		}
-		customOverlay = &CustomFeeOverlay{
-			FeeAmount:      RoundPrice(customFee),
+		customOverlay = &common.CustomFeeOverlay{
+			FeeAmount:      common.RoundPrice(customFee),
 			FeePercent:     feePercent.Round(2).String(),
-			EffectivePrice: RoundPrice(effectivePrice),
+			EffectivePrice: common.RoundPrice(effectivePrice),
 		}
 	}
 
 	// Build response
-	response := &OrderPreviewResponse{
+	response := &common.OrderPreviewResponse{
 		Product:          req.Product,
 		Side:             req.Side,
 		Type:             req.Type,
@@ -172,14 +173,14 @@ func (s *OrderService) GeneratePreview(ctx context.Context, req OrderRequest) (*
 // PlaceOrder places an actual order with Prime and returns immediately
 // Order updates should be tracked via the orders websocket
 // IMPORTANT: For quote-denominated orders, we deduct our markup BEFORE sending to Prime
-func (s *OrderService) PlaceOrder(ctx context.Context, req OrderRequest) (*OrderResponse, error) {
+func (s *OrderService) PlaceOrder(ctx context.Context, req common.OrderRequest) (*common.OrderResponse, error) {
 	// Validate request
-	if err := ValidateOrderRequest(req); err != nil {
+	if err := common.ValidateOrderRequest(req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
 	// Prepare order request with fee calculations (generate client order Id for actual orders)
-	prepared, err := PrepareOrderRequest(req, s.portfolioId, s.priceAdjuster, true)
+	prepared, err := common.PrepareOrderRequest(req, s.portfolioId, s.priceAdjuster, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare order: %w", err)
 	}
@@ -212,7 +213,7 @@ func (s *OrderService) PlaceOrder(ctx context.Context, req OrderRequest) (*Order
 	}
 
 	// Return minimal response - websocket will handle updates
-	response := &OrderResponse{
+	response := &common.OrderResponse{
 		OrderId:       createResp.OrderId,
 		ClientOrderId: prepared.NormalizedReq.ClientOrderId,
 		Product:       req.Product,

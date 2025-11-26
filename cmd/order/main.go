@@ -97,7 +97,7 @@ func run() error {
 	return executeOrder(ctx, cfg, adjuster, req, flags.unitType, flags.quantity)
 }
 
-func outputPreview(resp *order.OrderPreviewResponse) error {
+func outputPreview(resp *common.OrderPreviewResponse) error {
 	// Output as formatted JSON
 	data, err := json.MarshalIndent(resp, "", "  ")
 	if err != nil {
@@ -219,8 +219,8 @@ func loadConfigAndSetup() (*config.Config, *fees.PriceAdjuster, error) {
 }
 
 // buildOrderRequest constructs an OrderRequest from parsed flags
-func buildOrderRequest(flags *parsedFlags) order.OrderRequest {
-	req := order.OrderRequest{
+func buildOrderRequest(flags *parsedFlags) common.OrderRequest {
+	req := common.OrderRequest{
 		Product: flags.symbol,
 		Side:    flags.side,
 		Type:    flags.orderType,
@@ -239,7 +239,7 @@ func buildOrderRequest(flags *parsedFlags) order.OrderRequest {
 }
 
 // executePreview generates and displays an order preview
-func executePreview(ctx context.Context, cfg *config.Config, adjuster *fees.PriceAdjuster, req order.OrderRequest) error {
+func executePreview(ctx context.Context, cfg *config.Config, adjuster *fees.PriceAdjuster, req common.OrderRequest) error {
 	orderService := order.NewOrderServiceWithPrime(cfg, adjuster, nil)
 
 	response, err := orderService.GeneratePreview(ctx, req)
@@ -251,7 +251,7 @@ func executePreview(ctx context.Context, cfg *config.Config, adjuster *fees.Pric
 }
 
 // executeOrder places an actual order and stores metadata
-func executeOrder(ctx context.Context, cfg *config.Config, adjuster *fees.PriceAdjuster, req order.OrderRequest, unitType string, quantity decimal.Decimal) error {
+func executeOrder(ctx context.Context, cfg *config.Config, adjuster *fees.PriceAdjuster, req common.OrderRequest, unitType string, quantity decimal.Decimal) error {
 	orderService := order.NewOrderServiceWithPrime(cfg, adjuster, nil)
 
 	response, err := orderService.PlaceOrder(ctx, req)
@@ -279,7 +279,7 @@ func executeOrder(ctx context.Context, cfg *config.Config, adjuster *fees.PriceA
 	return nil
 }
 
-func storeOrderMetadata(cfg *config.Config, response *order.OrderResponse, req order.OrderRequest, adjuster *fees.PriceAdjuster) error {
+func storeOrderMetadata(cfg *config.Config, response *common.OrderResponse, req common.OrderRequest, adjuster *fees.PriceAdjuster) error {
 	// Open database
 	db, err := database.NewOrdersDb(cfg.Database.Path)
 	if err != nil {

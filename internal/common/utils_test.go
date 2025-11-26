@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
-package order
+package common
 
 import (
 	"testing"
 
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/shopspring/decimal"
 )
+
+// ============================================================================
+// Normalization Tests
+// ============================================================================
 
 func TestNormalizeSide(t *testing.T) {
 	tests := []struct {
@@ -42,9 +45,9 @@ func TestNormalizeSide(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := common.NormalizeSide(tt.input)
+			result := NormalizeSide(tt.input)
 			if result != tt.expected {
-				t.Errorf("common.NormalizeSide(%q) = %q, want %q", tt.input, result, tt.expected)
+				t.Errorf("NormalizeSide(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -70,13 +73,17 @@ func TestNormalizeOrderType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := common.NormalizeOrderType(tt.input)
+			result := NormalizeOrderType(tt.input)
 			if result != tt.expected {
-				t.Errorf("common.NormalizeOrderType(%q) = %q, want %q", tt.input, result, tt.expected)
+				t.Errorf("NormalizeOrderType(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
 }
+
+// ============================================================================
+// Validation Tests - Order Requests
+// ============================================================================
 
 func TestValidateOrderRequest(t *testing.T) {
 	tests := []struct {
@@ -220,6 +227,181 @@ func TestValidateOrderRequest(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// Validation Tests - RFQ Requests
+// ============================================================================
+
+func TestValidateRfqRequest(t *testing.T) {
+	tests := []struct {
+		name    string
+		req     RfqRequest
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid quote order",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "BUY",
+				QuoteValue: decimal.NewFromFloat(100.0),
+				LimitPrice: decimal.NewFromFloat(43000.0),
+				Unit:       "quote",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid base order",
+			req: RfqRequest{
+				Product:    "ETH-USD",
+				Side:       "SELL",
+				BaseQty:    decimal.NewFromFloat(0.5),
+				LimitPrice: decimal.NewFromFloat(2500.0),
+				Unit:       "base",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing product",
+			req: RfqRequest{
+				Side:       "BUY",
+				QuoteValue: decimal.NewFromFloat(100.0),
+				LimitPrice: decimal.NewFromFloat(43000.0),
+				Unit:       "quote",
+			},
+			wantErr: true,
+			errMsg:  "product is required",
+		},
+		{
+			name: "invalid side",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "HOLD",
+				QuoteValue: decimal.NewFromFloat(100.0),
+				LimitPrice: decimal.NewFromFloat(43000.0),
+				Unit:       "quote",
+			},
+			wantErr: true,
+			errMsg:  "side must be BUY or SELL",
+		},
+		{
+			name: "missing limit price",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "BUY",
+				QuoteValue: decimal.NewFromFloat(100.0),
+				Unit:       "quote",
+			},
+			wantErr: true,
+			errMsg:  "limit price is required and must be positive",
+		},
+		{
+			name: "zero limit price",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "BUY",
+				QuoteValue: decimal.NewFromFloat(100.0),
+				LimitPrice: decimal.Zero,
+				Unit:       "quote",
+			},
+			wantErr: true,
+			errMsg:  "limit price is required and must be positive",
+		},
+		{
+			name: "negative limit price",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "BUY",
+				QuoteValue: decimal.NewFromFloat(100.0),
+				LimitPrice: decimal.NewFromFloat(-43000.0),
+				Unit:       "quote",
+			},
+			wantErr: true,
+			errMsg:  "limit price is required and must be positive",
+		},
+		{
+			name: "zero quote value",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "BUY",
+				QuoteValue: decimal.Zero,
+				LimitPrice: decimal.NewFromFloat(43000.0),
+				Unit:       "quote",
+			},
+			wantErr: true,
+			errMsg:  "quote value must be positive",
+		},
+		{
+			name: "negative quote value",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "BUY",
+				QuoteValue: decimal.NewFromFloat(-100.0),
+				LimitPrice: decimal.NewFromFloat(43000.0),
+				Unit:       "quote",
+			},
+			wantErr: true,
+			errMsg:  "quote value must be positive",
+		},
+		{
+			name: "zero base quantity",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "SELL",
+				BaseQty:    decimal.Zero,
+				LimitPrice: decimal.NewFromFloat(43000.0),
+				Unit:       "base",
+			},
+			wantErr: true,
+			errMsg:  "base quantity must be positive",
+		},
+		{
+			name: "negative base quantity",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "SELL",
+				BaseQty:    decimal.NewFromFloat(-0.5),
+				LimitPrice: decimal.NewFromFloat(43000.0),
+				Unit:       "base",
+			},
+			wantErr: true,
+			errMsg:  "base quantity must be positive",
+		},
+		{
+			name: "invalid unit",
+			req: RfqRequest{
+				Product:    "BTC-USD",
+				Side:       "BUY",
+				QuoteValue: decimal.NewFromFloat(100.0),
+				LimitPrice: decimal.NewFromFloat(43000.0),
+				Unit:       "invalid",
+			},
+			wantErr: true,
+			errMsg:  "unit must be 'base' or 'quote'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateRfqRequest(tt.req)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ValidateRfqRequest() expected error containing %q, got nil", tt.errMsg)
+				} else if err.Error() != tt.errMsg {
+					t.Errorf("ValidateRfqRequest() error = %q, want %q", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("ValidateRfqRequest() unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Order Preparation Tests
+// ============================================================================
+
 func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 	// Setup: Create a percent fee strategy with 0.5% (50 bps)
 	feeStrategy, err := fees.CreateFeeStrategy("0.005") // 0.5%
@@ -309,11 +491,11 @@ func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 			if prepared.PrimeRequest.Order.ProductId != tt.req.Product {
 				t.Errorf("ProductId = %q, want %q", prepared.PrimeRequest.Order.ProductId, tt.req.Product)
 			}
-			if prepared.PrimeRequest.Order.Side != common.NormalizeSide(tt.req.Side) {
-				t.Errorf("Side = %q, want %q", prepared.PrimeRequest.Order.Side, common.NormalizeSide(tt.req.Side))
+			if prepared.PrimeRequest.Order.Side != NormalizeSide(tt.req.Side) {
+				t.Errorf("Side = %q, want %q", prepared.PrimeRequest.Order.Side, NormalizeSide(tt.req.Side))
 			}
-			if prepared.PrimeRequest.Order.Type != common.NormalizeOrderType(tt.req.Type) {
-				t.Errorf("Type = %q, want %q", prepared.PrimeRequest.Order.Type, common.NormalizeOrderType(tt.req.Type))
+			if prepared.PrimeRequest.Order.Type != NormalizeOrderType(tt.req.Type) {
+				t.Errorf("Type = %q, want %q", prepared.PrimeRequest.Order.Type, NormalizeOrderType(tt.req.Type))
 			}
 
 			// Check client order ID generation
@@ -422,6 +604,10 @@ func TestPrepareOrderRequest_BaseOrders(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Rounding Tests
+// ============================================================================
 
 func TestRoundPrice(t *testing.T) {
 	tests := []struct {

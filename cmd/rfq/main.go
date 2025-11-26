@@ -107,7 +107,7 @@ func run() error {
 	// Auto-accept if flag is set
 	if flags.autoAccept {
 		fmt.Println("\n--- Auto-accepting quote ---")
-		acceptResp, err := rfqService.AcceptQuote(ctx, rfq.AcceptRfqRequest{
+		acceptResp, err := rfqService.AcceptQuote(ctx, common.AcceptRfqRequest{
 			QuoteId: quoteResp.QuoteId,
 			Product: quoteResp.Product,
 			Side:    quoteResp.Side,
@@ -225,8 +225,8 @@ func loadConfigAndSetup() (*config.Config, *fees.PriceAdjuster, orders.OrdersSer
 	return cfg, adjuster, primeClient, nil
 }
 
-func buildRfqRequest(flags *parsedFlags) rfq.RfqRequest {
-	req := rfq.RfqRequest{
+func buildRfqRequest(flags *parsedFlags) common.RfqRequest {
+	req := common.RfqRequest{
 		Product:    flags.symbol,
 		Side:       flags.side,
 		LimitPrice: flags.limitPrice,
@@ -243,7 +243,7 @@ func buildRfqRequest(flags *parsedFlags) rfq.RfqRequest {
 	return req
 }
 
-func outputQuote(resp *rfq.RfqResponse) error {
+func outputQuote(resp *common.RfqResponse) error {
 	// Output as formatted JSON
 	data, err := json.MarshalIndent(resp, "", "  ")
 	if err != nil {
@@ -255,7 +255,7 @@ func outputQuote(resp *rfq.RfqResponse) error {
 	return nil
 }
 
-func outputAcceptResponse(resp *rfq.AcceptRfqResponse) error {
+func outputAcceptResponse(resp *common.AcceptRfqResponse) error {
 	fmt.Println("\n=== Quote Accepted ===")
 	fmt.Printf("Order ID: %s\n", resp.OrderId)
 	fmt.Printf("Quote ID: %s\n", resp.QuoteId)

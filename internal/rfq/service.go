@@ -24,6 +24,7 @@ import (
 	"github.com/coinbase-samples/prime-sdk-go/model"
 	"github.com/coinbase-samples/prime-sdk-go/orders"
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -46,9 +47,9 @@ func NewRfqService(cfg *config.Config, priceAdjuster *fees.PriceAdjuster, primeC
 }
 
 // CreateQuote creates an RFQ quote with fee markup applied
-func (s *RfqService) CreateQuote(ctx context.Context, req RfqRequest) (*RfqResponse, error) {
+func (s *RfqService) CreateQuote(ctx context.Context, req common.RfqRequest) (*common.RfqResponse, error) {
 	// Validate request
-	if err := ValidateRfqRequest(req); err != nil {
+	if err := common.ValidateRfqRequest(req); err != nil {
 		return nil, err
 	}
 
@@ -75,7 +76,7 @@ func (s *RfqService) CreateQuote(ctx context.Context, req RfqRequest) (*RfqRespo
 }
 
 // AcceptQuote accepts an RFQ quote
-func (s *RfqService) AcceptQuote(ctx context.Context, req AcceptRfqRequest) (*AcceptRfqResponse, error) {
+func (s *RfqService) AcceptQuote(ctx context.Context, req common.AcceptRfqRequest) (*common.AcceptRfqResponse, error) {
 	// Generate client order ID if not provided
 	clientOrderId := req.ClientOrderId
 	if clientOrderId == "" {
@@ -95,7 +96,7 @@ func (s *RfqService) AcceptQuote(ctx context.Context, req AcceptRfqRequest) (*Ac
 		return nil, fmt.Errorf("failed to accept quote: %w", err)
 	}
 
-	response := &AcceptRfqResponse{
+	response := &common.AcceptRfqResponse{
 		OrderId:       primeResp.OrderId,
 		QuoteId:       req.QuoteId,
 		ClientOrderId: clientOrderId,
@@ -112,7 +113,7 @@ func (s *RfqService) AcceptQuote(ctx context.Context, req AcceptRfqRequest) (*Ac
 }
 
 // buildPrimeQuoteRequest builds the Prime API request with fee adjustments
-func (s *RfqService) buildPrimeQuoteRequest(req RfqRequest) (*orders.CreateQuoteRequest, decimal.Decimal, decimal.Decimal) {
+func (s *RfqService) buildPrimeQuoteRequest(req common.RfqRequest) (*orders.CreateQuoteRequest, decimal.Decimal, decimal.Decimal) {
 	primeReq := &orders.CreateQuoteRequest{
 		PortfolioId:   s.portfolioId,
 		ProductId:     req.Product,
@@ -142,8 +143,8 @@ func (s *RfqService) buildPrimeQuoteRequest(req RfqRequest) (*orders.CreateQuote
 }
 
 // buildQuoteResponse builds the user-facing response with fee overlay
-func (s *RfqService) buildQuoteResponse(primeResp *orders.CreateQuoteResponse, req RfqRequest, originalAmount, feeAmount decimal.Decimal) *RfqResponse {
-	response := &RfqResponse{
+func (s *RfqService) buildQuoteResponse(primeResp *orders.CreateQuoteResponse, req common.RfqRequest, originalAmount, feeAmount decimal.Decimal) *common.RfqResponse {
+	response := &common.RfqResponse{
 		QuoteId:             primeResp.QuoteId,
 		Product:             req.Product,
 		Side:                req.Side,

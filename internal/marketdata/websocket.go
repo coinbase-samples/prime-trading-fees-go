@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/gorilla/websocket"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -273,13 +274,13 @@ func (c *WebSocketClient) parseEventMetadata(event map[string]interface{}) (stri
 }
 
 // parseUpdates extracts and parses all price level updates from an event
-func (c *WebSocketClient) parseUpdates(event map[string]interface{}) (map[string]PriceLevel, error) {
+func (c *WebSocketClient) parseUpdates(event map[string]interface{}) (map[string]common.PriceLevel, error) {
 	updatesRaw, ok := event["updates"].([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("event missing updates array")
 	}
 
-	levels := make(map[string]PriceLevel)
+	levels := make(map[string]common.PriceLevel)
 
 	for _, updateRaw := range updatesRaw {
 		update, ok := updateRaw.(map[string]interface{})
@@ -300,7 +301,7 @@ func (c *WebSocketClient) parseUpdates(event map[string]interface{}) (map[string
 			continue
 		}
 
-		priceLevel := PriceLevel{
+		priceLevel := common.PriceLevel{
 			Price: price,
 			Size:  size,
 		}
@@ -333,19 +334,19 @@ func (c *WebSocketClient) parseDecimalField(update map[string]interface{}, key s
 }
 
 // handleSnapshot replaces the entire order book with snapshot data
-func (c *WebSocketClient) handleSnapshot(book *OrderBook, levels map[string]PriceLevel) error {
+func (c *WebSocketClient) handleSnapshot(book *OrderBook, levels map[string]common.PriceLevel) error {
 	bids, asks := c.buildOrderBook(levels)
 	book.Update(bids, asks, 0)
 	return nil
 }
 
 // handleUpdate applies incremental updates to existing order book
-func (c *WebSocketClient) handleUpdate(book *OrderBook, newLevels map[string]PriceLevel) error {
+func (c *WebSocketClient) handleUpdate(book *OrderBook, newLevels map[string]common.PriceLevel) error {
 	snapshot := book.Snapshot()
 
 	// Build maps of existing levels
-	bidMap := make(map[string]PriceLevel)
-	askMap := make(map[string]PriceLevel)
+	bidMap := make(map[string]common.PriceLevel)
+	askMap := make(map[string]common.PriceLevel)
 
 	for _, bid := range snapshot.Bids {
 		bidMap[bid.Price.String()] = bid
@@ -387,9 +388,9 @@ func (c *WebSocketClient) handleUpdate(book *OrderBook, newLevels map[string]Pri
 }
 
 // buildOrderBook converts a map of levels into sorted, limited bid/ask slices
-func (c *WebSocketClient) buildOrderBook(levels map[string]PriceLevel) ([]PriceLevel, []PriceLevel) {
-	bids := []PriceLevel{}
-	asks := []PriceLevel{}
+func (c *WebSocketClient) buildOrderBook(levels map[string]common.PriceLevel) ([]common.PriceLevel, []common.PriceLevel) {
+	bids := []common.PriceLevel{}
+	asks := []common.PriceLevel{}
 
 	for key, level := range levels {
 		if level.Size.IsZero() {
@@ -409,8 +410,8 @@ func (c *WebSocketClient) buildOrderBook(levels map[string]PriceLevel) ([]PriceL
 }
 
 // mapToSlice converts a map of price levels to a slice
-func (c *WebSocketClient) mapToSlice(m map[string]PriceLevel) []PriceLevel {
-	result := make([]PriceLevel, 0, len(m))
+func (c *WebSocketClient) mapToSlice(m map[string]common.PriceLevel) []common.PriceLevel {
+	result := make([]common.PriceLevel, 0, len(m))
 	for _, level := range m {
 		result = append(result, level)
 	}
@@ -418,7 +419,7 @@ func (c *WebSocketClient) mapToSlice(m map[string]PriceLevel) []PriceLevel {
 }
 
 // limitLevels caps the number of levels if MaxLevels is configured
-func (c *WebSocketClient) limitLevels(levels []PriceLevel) []PriceLevel {
+func (c *WebSocketClient) limitLevels(levels []common.PriceLevel) []common.PriceLevel {
 	if c.config.MaxLevels > 0 && len(levels) > c.config.MaxLevels {
 		return levels[:c.config.MaxLevels]
 	}
@@ -426,14 +427,14 @@ func (c *WebSocketClient) limitLevels(levels []PriceLevel) []PriceLevel {
 }
 
 // sortBids sorts bids in descending order (highest price first)
-func (c *WebSocketClient) sortBids(bids []PriceLevel) {
+func (c *WebSocketClient) sortBids(bids []common.PriceLevel) {
 	sort.Slice(bids, func(i, j int) bool {
 		return bids[i].Price.GreaterThan(bids[j].Price)
 	})
 }
 
 // sortAsks sorts asks in ascending order (lowest price first)
-func (c *WebSocketClient) sortAsks(asks []PriceLevel) {
+func (c *WebSocketClient) sortAsks(asks []common.PriceLevel) {
 	sort.Slice(asks, func(i, j int) bool {
 		return asks[i].Price.LessThan(asks[j].Price)
 	})

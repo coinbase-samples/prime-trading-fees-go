@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/marketdata"
 	"github.com/joho/godotenv"
@@ -151,7 +152,7 @@ func run() error {
 	}
 }
 
-func displayOrderBook(product string, snapshot marketdata.OrderBookSnapshot, adjuster *fees.PriceAdjuster) {
+func displayOrderBook(product string, snapshot common.OrderBookSnapshot, adjuster *fees.PriceAdjuster) {
 	// Display header
 	fmt.Printf("\n═══════════════════════════════════════════════════════════════\n")
 	fmt.Printf("  %s Order Book @ %s\n", product, snapshot.UpdateTime.Format("15:04:05"))

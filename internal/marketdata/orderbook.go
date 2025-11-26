@@ -20,32 +20,34 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 )
 
 // OrderBook maintains the current state of bids and asks for a product
 type OrderBook struct {
 	mu           sync.Mutex // only writers use this
 	Product      string
-	Bids         []PriceLevel // Sorted descending by price
-	Asks         []PriceLevel // Sorted ascending by price
+	Bids         []common.PriceLevel // Sorted descending by price
+	Asks         []common.PriceLevel // Sorted ascending by price
 	UpdateTime   time.Time
 	Sequence     uint64
-	bestBidValue atomic.Value // stores PriceLevel or nil
-	bestAskValue atomic.Value // stores PriceLevel or nil
+	bestBidValue atomic.Value // stores common.PriceLevel or nil
+	bestAskValue atomic.Value // stores common.PriceLevel or nil
 }
 
 // NewOrderBook creates a new order book for a product
 func NewOrderBook(product string) *OrderBook {
 	return &OrderBook{
 		Product:    product,
-		Bids:       make([]PriceLevel, 0),
-		Asks:       make([]PriceLevel, 0),
+		Bids:       make([]common.PriceLevel, 0),
+		Asks:       make([]common.PriceLevel, 0),
 		UpdateTime: time.Now(),
 	}
 }
 
 // Update replaces the order book with new levels
-func (ob *OrderBook) Update(bids, asks []PriceLevel, sequence uint64) {
+func (ob *OrderBook) Update(bids, asks []common.PriceLevel, sequence uint64) {
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
 
@@ -69,25 +71,25 @@ func (ob *OrderBook) Update(bids, asks []PriceLevel, sequence uint64) {
 }
 
 // GetBestBid returns the highest bid price and size
-func (ob *OrderBook) GetBestBid() (PriceLevel, bool) {
+func (ob *OrderBook) GetBestBid() (common.PriceLevel, bool) {
 	v := ob.bestBidValue.Load()
 	if v == nil {
-		return PriceLevel{}, false
+		return common.PriceLevel{}, false
 	}
-	return v.(PriceLevel), true
+	return v.(common.PriceLevel), true
 }
 
 // GetBestAsk returns the lowest ask price and size
-func (ob *OrderBook) GetBestAsk() (PriceLevel, bool) {
+func (ob *OrderBook) GetBestAsk() (common.PriceLevel, bool) {
 	v := ob.bestAskValue.Load()
 	if v == nil {
-		return PriceLevel{}, false
+		return common.PriceLevel{}, false
 	}
-	return v.(PriceLevel), true
+	return v.(common.PriceLevel), true
 }
 
 // GetTopLevels returns the top N levels of bids and asks
-func (ob *OrderBook) GetTopLevels(n int) (bids []PriceLevel, asks []PriceLevel) {
+func (ob *OrderBook) GetTopLevels(n int) (bids []common.PriceLevel, asks []common.PriceLevel) {
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
 
@@ -101,27 +103,27 @@ func (ob *OrderBook) GetTopLevels(n int) (bids []PriceLevel, asks []PriceLevel) 
 		askCount = len(ob.Asks)
 	}
 
-	bids = make([]PriceLevel, bidCount)
+	bids = make([]common.PriceLevel, bidCount)
 	copy(bids, ob.Bids[:bidCount])
 
-	asks = make([]PriceLevel, askCount)
+	asks = make([]common.PriceLevel, askCount)
 	copy(asks, ob.Asks[:askCount])
 
 	return bids, asks
 }
 
 // Snapshot returns a copy of the current order book state
-func (ob *OrderBook) Snapshot() OrderBookSnapshot {
+func (ob *OrderBook) Snapshot() common.OrderBookSnapshot {
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
 
-	bids := make([]PriceLevel, len(ob.Bids))
+	bids := make([]common.PriceLevel, len(ob.Bids))
 	copy(bids, ob.Bids)
 
-	asks := make([]PriceLevel, len(ob.Asks))
+	asks := make([]common.PriceLevel, len(ob.Asks))
 	copy(asks, ob.Asks)
 
-	return OrderBookSnapshot{
+	return common.OrderBookSnapshot{
 		Product:    ob.Product,
 		Bids:       bids,
 		Asks:       asks,

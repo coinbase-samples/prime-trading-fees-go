@@ -22,9 +22,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/database"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/order"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
@@ -32,7 +32,7 @@ import (
 // MetadataStore stores order metadata in memory
 type MetadataStore struct {
 	mu   sync.RWMutex
-	data map[string]interface{} // key: order_id, value: *order.OrderMetadata or map
+	data map[string]interface{} // key: order_id, value: *common.OrderMetadata or map
 }
 
 // NewMetadataStore creates a new metadata store
@@ -214,7 +214,7 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 
 	if hasMetadata {
 		// Handle typed metadata from in-memory store
-		if meta, ok := metadataRaw.(*order.OrderMetadata); ok {
+		if meta, ok := metadataRaw.(*common.OrderMetadata); ok {
 			userRequestedAmount = meta.UserRequestedAmount.String()
 			markupAmount = meta.MarkupAmount.String()
 			primeOrderQuoteAmount = meta.PrimeOrderQuoteAmount.String()

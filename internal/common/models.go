@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package order
+package common
 
 import (
 	"time"
@@ -22,6 +22,63 @@ import (
 	"github.com/coinbase-samples/prime-sdk-go/orders"
 	"github.com/shopspring/decimal"
 )
+
+// ============================================================================
+// RFQ Models
+// ============================================================================
+
+// RfqRequest represents a request for quote from the user's perspective
+type RfqRequest struct {
+	Product    string          // e.g., "BTC-USD"
+	Side       string          // "BUY" or "SELL"
+	BaseQty    decimal.Decimal // For base-denominated RFQs
+	QuoteValue decimal.Decimal // For quote-denominated RFQs
+	LimitPrice decimal.Decimal // Optional limit price
+	Unit       string          // "base" or "quote"
+}
+
+// RfqResponse represents the quote response shown to the user
+type RfqResponse struct {
+	QuoteId             string `json:"quote_id"`
+	Product             string `json:"product"`
+	Side                string `json:"side"`
+	ExpirationTime      string `json:"expiration_time"`
+	Unit                string `json:"unit"`
+	UserRequestedAmount string `json:"user_requested_amount"`
+	Timestamp           string `json:"timestamp"`
+	RawPrimeQuote       struct {
+		BestPrice            string `json:"best_price"`
+		OrderTotal           string `json:"order_total"`
+		PriceInclusiveOfFees string `json:"price_inclusive_of_fees"`
+	} `json:"raw_prime_quote"`
+	CustomFeeOverlay struct {
+		FeeAmount      string `json:"fee_amount"`
+		FeePercent     string `json:"fee_percent"`
+		EffectivePrice string `json:"effective_price"`
+		TotalCost      string `json:"total_cost"`
+	} `json:"custom_fee_overlay"`
+}
+
+// AcceptRfqRequest represents the request to accept a quote
+type AcceptRfqRequest struct {
+	QuoteId       string
+	Product       string
+	Side          string
+	ClientOrderId string
+}
+
+// AcceptRfqResponse represents the response after accepting a quote
+type AcceptRfqResponse struct {
+	OrderId       string `json:"order_id"`
+	QuoteId       string `json:"quote_id"`
+	ClientOrderId string `json:"client_order_id"`
+	Product       string `json:"product"`
+	Side          string `json:"side"`
+}
+
+// ============================================================================
+// Order Models
+// ============================================================================
 
 // OrderRequest represents a request for an order (preview or actual)
 type OrderRequest struct {
@@ -99,4 +156,23 @@ type NormalizedOrderRequest struct {
 	Side          string // Already normalized to uppercase
 	Type          string // Already normalized to uppercase
 	ClientOrderId string // Generated UUID
+}
+
+// ============================================================================
+// Market Data Models
+// ============================================================================
+
+// PriceLevel represents a single price level in the order book
+type PriceLevel struct {
+	Price decimal.Decimal
+	Size  decimal.Decimal
+}
+
+// OrderBookSnapshot is an immutable snapshot of the order book
+type OrderBookSnapshot struct {
+	Product    string
+	Bids       []PriceLevel
+	Asks       []PriceLevel
+	UpdateTime time.Time
+	Sequence   uint64
 }

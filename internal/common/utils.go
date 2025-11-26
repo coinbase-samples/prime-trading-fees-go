@@ -14,18 +14,61 @@
  * limitations under the License.
  */
 
-package order
+package common
 
 import (
 	"fmt"
 
 	"github.com/coinbase-samples/prime-sdk-go/model"
 	"github.com/coinbase-samples/prime-sdk-go/orders"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
+
+// ============================================================================
+// Normalization Functions
+// ============================================================================
+
+// NormalizeSide normalizes order side to uppercase
+func NormalizeSide(side string) string {
+	if side == "buy" {
+		return "BUY"
+	}
+	if side == "sell" {
+		return "SELL"
+	}
+	return side
+}
+
+// NormalizeOrderType normalizes order type to uppercase
+func NormalizeOrderType(orderType string) string {
+	if orderType == "market" {
+		return "MARKET"
+	}
+	if orderType == "limit" {
+		return "LIMIT"
+	}
+	return orderType
+}
+
+// ============================================================================
+// Rounding Functions
+// ============================================================================
+
+// RoundPrice rounds a price to 2 decimal places for USD
+func RoundPrice(d decimal.Decimal) string {
+	return d.Round(2).String()
+}
+
+// RoundQty rounds a quantity to 8 decimal places for crypto
+func RoundQty(d decimal.Decimal) string {
+	return d.Round(8).String()
+}
+
+// ============================================================================
+// Order Preparation Functions
+// ============================================================================
 
 // PrepareOrderRequest builds a Prime API order request from user input
 // This consolidates the logic shared between preview and execution
@@ -36,8 +79,8 @@ func PrepareOrderRequest(
 	generateClientOrderId bool,
 ) (*PreparedOrder, error) {
 	// Normalize side and type
-	normalizedSide := common.NormalizeSide(req.Side)
-	normalizedType := common.NormalizeOrderType(req.Type)
+	normalizedSide := NormalizeSide(req.Side)
+	normalizedType := NormalizeOrderType(req.Type)
 
 	// Generate client order Id if needed (for actual orders, not previews)
 	clientOrderId := ""
@@ -96,15 +139,9 @@ func PrepareOrderRequest(
 	}, nil
 }
 
-// RoundPrice rounds a price to 2 decimal places for USD
-func RoundPrice(d decimal.Decimal) string {
-	return d.Round(2).String()
-}
-
-// RoundQty rounds a quantity to 8 decimal places for crypto
-func RoundQty(d decimal.Decimal) string {
-	return d.Round(8).String()
-}
+// ============================================================================
+// Validation Functions
+// ============================================================================
 
 // ValidateOrderRequest validates common order request parameters
 func ValidateOrderRequest(req OrderRequest) error {
@@ -128,6 +165,35 @@ func ValidateOrderRequest(req OrderRequest) error {
 		}
 	} else {
 		return fmt.Errorf("quantity must be specified")
+	}
+
+	return nil
+}
+
+// ValidateRfqRequest validates an RFQ request
+func ValidateRfqRequest(req RfqRequest) error {
+	if req.Product == "" {
+		return fmt.Errorf("product is required")
+	}
+
+	if req.Side != "BUY" && req.Side != "SELL" {
+		return fmt.Errorf("side must be BUY or SELL")
+	}
+
+	if req.LimitPrice.IsZero() || req.LimitPrice.IsNegative() {
+		return fmt.Errorf("limit price is required and must be positive")
+	}
+
+	if req.Unit == "quote" {
+		if req.QuoteValue.IsZero() || req.QuoteValue.IsNegative() {
+			return fmt.Errorf("quote value must be positive")
+		}
+	} else if req.Unit == "base" {
+		if req.BaseQty.IsZero() || req.BaseQty.IsNegative() {
+			return fmt.Errorf("base quantity must be positive")
+		}
+	} else {
+		return fmt.Errorf("unit must be 'base' or 'quote'")
 	}
 
 	return nil
