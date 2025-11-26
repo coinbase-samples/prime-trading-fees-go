@@ -25,9 +25,9 @@ import (
 	"syscall"
 
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/database"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/orders"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/websocket"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
@@ -83,22 +83,22 @@ func run() error {
 	zap.L().Info("Database opened", zap.String("path", cfg.Database.Path))
 
 	// Create fee strategy
-	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees.Percent)
+	feeStrategy, err := common.CreateFeeStrategy(cfg.Fees.Percent)
 	if err != nil {
 		return fmt.Errorf("failed to create fee strategy: %w", err)
 	}
 
 	// Create price adjuster
-	priceAdjuster := fees.NewPriceAdjuster(feeStrategy)
+	priceAdjuster := common.NewPriceAdjuster(feeStrategy)
 
 	// Create metadata store (shared in-memory store for order metadata)
-	metadataStore := orders.NewMetadataStore()
+	metadataStore := websocket.NewMetadataStore()
 
 	// Create database handler
-	handler := orders.NewDbOrderHandler(db, priceAdjuster, metadataStore)
+	handler := websocket.NewDbOrderHandler(db, priceAdjuster, metadataStore)
 
 	// Create orders websocket config
-	wsConfig := orders.WebSocketConfig{
+	wsConfig := websocket.OrdersConfig{
 		Url:              cfg.MarketData.WebSocketUrl,
 		AccessKey:        cfg.Prime.AccessKey,
 		Passphrase:       cfg.Prime.Passphrase,
@@ -110,7 +110,7 @@ func run() error {
 	}
 
 	// Create and start websocket client
-	wsClient := orders.NewWebSocketClient(wsConfig, handler)
+	wsClient := websocket.NewOrdersClient(wsConfig, handler)
 	if err := wsClient.Start(); err != nil {
 		return fmt.Errorf("failed to start websocket client: %w", err)
 	}

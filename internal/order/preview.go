@@ -26,7 +26,6 @@ import (
 	"github.com/coinbase-samples/prime-sdk-go/orders"
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
@@ -35,14 +34,14 @@ import (
 type OrderService struct {
 	ordersSvc     orders.OrdersService
 	portfolioId   string
-	priceAdjuster *fees.PriceAdjuster
+	priceAdjuster *common.PriceAdjuster
 	metadataStore interface {
 		Set(orderId string, metadata interface{})
 	}
 }
 
 // NewOrderServiceWithPrime creates a new order service using Prime REST API
-func NewOrderServiceWithPrime(cfg *config.Config, priceAdjuster *fees.PriceAdjuster, metadataStore interface{ Set(string, interface{}) }) *OrderService {
+func NewOrderServiceWithPrime(cfg *config.Config, priceAdjuster *common.PriceAdjuster, metadataStore interface{ Set(string, interface{}) }) *OrderService {
 	creds := &credentials.Credentials{
 		AccessKey:    cfg.Prime.AccessKey,
 		Passphrase:   cfg.Prime.Passphrase,
@@ -125,20 +124,14 @@ func (s *OrderService) GeneratePreview(ctx context.Context, req common.OrderRequ
 	customFee := s.priceAdjuster.ComputeFee(baseQty, executionPrice)
 
 	// Calculate effective price (total cost / quantity including our fee)
-	totalCost := baseQty.Mul(executionPrice).Add(primeFee).Add(customFee)
-	effectivePrice := decimal.Zero
-	if !baseQty.IsZero() {
-		effectivePrice = totalCost.Div(baseQty)
-	}
+	totalCost := common.CalculateTotalCost(baseQty, executionPrice, primeFee, customFee)
+	effectivePrice := common.CalculateEffectivePrice(totalCost, baseQty)
 
 	// Build custom fee overlay (our calculations)
 	var customOverlay *common.CustomFeeOverlay
 	if !customFee.IsZero() {
-		notional := baseQty.Mul(executionPrice)
-		feePercent := decimal.Zero
-		if !notional.IsZero() {
-			feePercent = customFee.Div(notional).Mul(decimal.NewFromInt(100))
-		}
+		notional := common.CalculateNotional(baseQty, executionPrice)
+		feePercent := common.CalculateFeePercent(customFee, notional)
 		customOverlay = &common.CustomFeeOverlay{
 			FeeAmount:      common.RoundPrice(customFee),
 			FeePercent:     feePercent.Round(2).String(),

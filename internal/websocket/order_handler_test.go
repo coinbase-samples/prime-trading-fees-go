@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package orders
+package websocket
 
 import (
 	"testing"
 
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/shopspring/decimal"
 )
 
@@ -199,8 +199,8 @@ func TestCalculateFeeSettlement_ZeroPrice(t *testing.T) {
 
 func TestCalculateFeeSettlement_NoMarkup(t *testing.T) {
 	// Create handler with fee strategy for base order calculations
-	feeStrategy := fees.NewFeeStrategy(decimal.NewFromFloat(0.005)) // 0.5% fee
-	priceAdjuster := fees.NewPriceAdjuster(feeStrategy)
+	feeStrategy := common.NewFeeStrategy(decimal.NewFromFloat(0.005)) // 0.5% fee
+	priceAdjuster := common.NewPriceAdjuster(feeStrategy)
 	handler := &DbOrderHandler{
 		priceAdjuster: priceAdjuster,
 	}

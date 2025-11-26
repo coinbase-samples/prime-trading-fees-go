@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package marketdata
+package websocket
 
 import (
 	"sync"

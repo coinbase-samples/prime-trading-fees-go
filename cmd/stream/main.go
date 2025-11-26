@@ -27,8 +27,7 @@ import (
 
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/marketdata"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/websocket"
 	"github.com/joho/godotenv"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -78,18 +77,18 @@ func run() error {
 	fmt.Printf("Display updates every 5 seconds. Press Ctrl+C to stop.\n\n")
 
 	// Initialize components
-	store := marketdata.NewOrderBookStore()
+	store := websocket.NewOrderBookStore()
 
 	// Create fee strategy
-	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees.Percent)
+	feeStrategy, err := common.CreateFeeStrategy(cfg.Fees.Percent)
 	if err != nil {
 		return fmt.Errorf("failed to create fee strategy: %w", err)
 	}
 
-	adjuster := fees.NewPriceAdjuster(feeStrategy)
+	adjuster := common.NewPriceAdjuster(feeStrategy)
 
 	// Start market data feed
-	wsConfig := marketdata.WebSocketConfig{
+	wsConfig := websocket.MarketDataConfig{
 		Url:              cfg.MarketData.WebSocketUrl,
 		AccessKey:        cfg.Prime.AccessKey,
 		Passphrase:       cfg.Prime.Passphrase,
@@ -100,7 +99,7 @@ func run() error {
 		MaxLevels:        cfg.MarketData.MaxLevels,
 		ReconnectDelay:   cfg.MarketData.ReconnectDelay,
 	}
-	wsClient := marketdata.NewWebSocketClient(wsConfig, store)
+	wsClient := websocket.NewMarketDataClient(wsConfig, store)
 
 	if err := wsClient.Start(); err != nil {
 		return fmt.Errorf("failed to start market data: %w", err)
@@ -152,7 +151,7 @@ func run() error {
 	}
 }
 
-func displayOrderBook(product string, snapshot common.OrderBookSnapshot, adjuster *fees.PriceAdjuster) {
+func displayOrderBook(product string, snapshot common.OrderBookSnapshot, adjuster *common.PriceAdjuster) {
 	// Display header
 	fmt.Printf("\n═══════════════════════════════════════════════════════════════\n")
 	fmt.Printf("  %s Order Book @ %s\n", product, snapshot.UpdateTime.Format("15:04:05"))

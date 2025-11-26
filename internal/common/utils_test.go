@@ -19,7 +19,6 @@ package common
 import (
 	"testing"
 
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/shopspring/decimal"
 )
 
@@ -404,12 +403,12 @@ func TestValidateRfqRequest(t *testing.T) {
 
 func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 	// Setup: Create a percent fee strategy with 0.5% (50 bps)
-	feeStrategy, err := fees.CreateFeeStrategy("0.005") // 0.5%
+	feeStrategy, err := CreateFeeStrategy("0.005") // 0.5%
 	if err != nil {
 		t.Fatalf("Failed to create fee strategy: %v", err)
 	}
 
-	priceAdjuster := &fees.PriceAdjuster{
+	priceAdjuster := &PriceAdjuster{
 		FeeStrategy: feeStrategy,
 	}
 
@@ -542,8 +541,8 @@ func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 
 func TestPrepareOrderRequest_BaseOrders(t *testing.T) {
 	// Base orders don't use the fee strategy, but we still need to provide one
-	feeStrategy, _ := fees.CreateFeeStrategy("0.005")
-	priceAdjuster := &fees.PriceAdjuster{
+	feeStrategy, _ := CreateFeeStrategy("0.005")
+	priceAdjuster := &PriceAdjuster{
 		FeeStrategy: feeStrategy,
 	}
 

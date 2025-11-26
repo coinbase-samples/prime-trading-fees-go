@@ -28,7 +28,6 @@ import (
 	"github.com/coinbase-samples/prime-sdk-go/orders"
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/rfq"
 	"github.com/joho/godotenv"
 	"github.com/shopspring/decimal"
@@ -192,7 +191,7 @@ func parseAndValidateFlags() (*parsedFlags, error) {
 	}, nil
 }
 
-func loadConfigAndSetup() (*config.Config, *fees.PriceAdjuster, orders.OrdersService, error) {
+func loadConfigAndSetup() (*config.Config, *common.PriceAdjuster, orders.OrdersService, error) {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load config: %w", err)
@@ -202,12 +201,12 @@ func loadConfigAndSetup() (*config.Config, *fees.PriceAdjuster, orders.OrdersSer
 	config.SetupLogger(cfg.Server.LogLevel, cfg.Server.LogJson)
 
 	// Create fee strategy
-	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees.Percent)
+	feeStrategy, err := common.CreateFeeStrategy(cfg.Fees.Percent)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create fee strategy: %w", err)
 	}
 
-	adjuster := fees.NewPriceAdjuster(feeStrategy)
+	adjuster := common.NewPriceAdjuster(feeStrategy)
 
 	// Create Prime client
 	creds := &credentials.Credentials{

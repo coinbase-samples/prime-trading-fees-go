@@ -21,7 +21,6 @@ import (
 
 	"github.com/coinbase-samples/prime-sdk-go/model"
 	"github.com/coinbase-samples/prime-sdk-go/orders"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
@@ -75,7 +74,7 @@ func RoundQty(d decimal.Decimal) string {
 func PrepareOrderRequest(
 	req OrderRequest,
 	portfolioId string,
-	priceAdjuster *fees.PriceAdjuster,
+	priceAdjuster *PriceAdjuster,
 	generateClientOrderId bool,
 ) (*PreparedOrder, error) {
 	// Normalize side and type

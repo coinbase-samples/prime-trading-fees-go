@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
-package orders
+package common
+
+// ============================================================================
+// Order Status Constants
+// ============================================================================
 
 // Order statuses from Prime WebSocket API
 const (
@@ -24,7 +28,10 @@ const (
 	OrderStatusOpen      = "OPEN"
 )
 
-// Default values
+// ============================================================================
+// Default Values
+// ============================================================================
+
 const (
 	DefaultZeroString = "0"
 	UnknownEventType  = "unknown"

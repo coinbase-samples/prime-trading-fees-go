@@ -25,7 +25,6 @@ import (
 	"github.com/coinbase-samples/prime-sdk-go/orders"
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -34,11 +33,11 @@ import (
 type RfqService struct {
 	primeClient   orders.OrdersService
 	portfolioId   string
-	priceAdjuster *fees.PriceAdjuster
+	priceAdjuster *common.PriceAdjuster
 }
 
 // NewRfqService creates a new RFQ service
-func NewRfqService(cfg *config.Config, priceAdjuster *fees.PriceAdjuster, primeClient orders.OrdersService) *RfqService {
+func NewRfqService(cfg *config.Config, priceAdjuster *common.PriceAdjuster, primeClient orders.OrdersService) *RfqService {
 	return &RfqService{
 		primeClient:   primeClient,
 		portfolioId:   cfg.Prime.Portfolio,
@@ -130,7 +129,7 @@ func (s *RfqService) buildPrimeQuoteRequest(req common.RfqRequest) (*orders.Crea
 		// Quote-denominated: Hold fee upfront, send reduced amount to Prime
 		originalAmount = req.QuoteValue
 		feeAmount = s.priceAdjuster.FeeStrategy.ComputeFromNotional(req.QuoteValue)
-		primeAmount := req.QuoteValue.Sub(feeAmount)
+		primeAmount := common.CalculateRfqQuoteAmount(req.QuoteValue, feeAmount)
 		primeReq.QuoteValue = primeAmount.String()
 	} else {
 		// Base-denominated: Send full quantity to Prime, fee added on top later
@@ -160,7 +159,7 @@ func (s *RfqService) buildQuoteResponse(primeResp *orders.CreateQuoteResponse, r
 	response.RawPrimeQuote.PriceInclusiveOfFees = primeResp.PriceInclusiveOfFees
 
 	// Calculate fee overlay
-	feePercent := s.priceAdjuster.FeeStrategy.Percent.Mul(decimal.NewFromInt(100))
+	feePercent := common.ToPercentageDisplay(s.priceAdjuster.FeeStrategy.Percent)
 
 	if req.Unit == "quote" {
 		// Quote orders: fee already held upfront
@@ -178,7 +177,7 @@ func (s *RfqService) buildQuoteResponse(primeResp *orders.CreateQuoteResponse, r
 			bestPrice, _ := decimal.NewFromString(primeResp.BestPrice)
 			if !bestPrice.IsZero() {
 				qty := primeTotal.Div(bestPrice)
-				effectivePrice := totalCost.Div(qty)
+				effectivePrice := common.CalculateRfqEffectivePrice(totalCost, qty)
 				response.CustomFeeOverlay.EffectivePrice = effectivePrice.StringFixed(2)
 			}
 		}
@@ -186,17 +185,15 @@ func (s *RfqService) buildQuoteResponse(primeResp *orders.CreateQuoteResponse, r
 		// Base orders: calculate fee on top of Prime's cost
 		primeTotal, _ := decimal.NewFromString(primeResp.OrderTotal)
 		feeAmount = s.priceAdjuster.FeeStrategy.ComputeFromNotional(primeTotal)
-		totalCost := primeTotal.Add(feeAmount)
+		totalCost := common.CalculateRfqTotalCost(primeTotal, feeAmount)
 
 		response.CustomFeeOverlay.FeeAmount = feeAmount.String()
 		response.CustomFeeOverlay.FeePercent = feePercent.String()
 		response.CustomFeeOverlay.TotalCost = totalCost.String()
 
 		// Effective price = total cost / base quantity
-		if !originalAmount.IsZero() {
-			effectivePrice := totalCost.Div(originalAmount)
-			response.CustomFeeOverlay.EffectivePrice = effectivePrice.StringFixed(2)
-		}
+		effectivePrice := common.CalculateRfqEffectivePrice(totalCost, originalAmount)
+		response.CustomFeeOverlay.EffectivePrice = effectivePrice.StringFixed(2)
 	}
 
 	return response

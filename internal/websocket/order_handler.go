@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package orders
+package websocket
 
 import (
 	"encoding/json"
@@ -24,7 +24,6 @@ import (
 
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/database"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
@@ -67,12 +66,12 @@ func (s *MetadataStore) Delete(orderId string) {
 // DbOrderHandler processes order updates and stores them in the database
 type DbOrderHandler struct {
 	db            *database.OrdersDb
-	priceAdjuster *fees.PriceAdjuster
+	priceAdjuster *common.PriceAdjuster
 	metadataStore *MetadataStore
 }
 
 // NewDbOrderHandler creates a new database order handler
-func NewDbOrderHandler(db *database.OrdersDb, priceAdjuster *fees.PriceAdjuster, metadataStore *MetadataStore) *DbOrderHandler {
+func NewDbOrderHandler(db *database.OrdersDb, priceAdjuster *common.PriceAdjuster, metadataStore *MetadataStore) *DbOrderHandler {
 	return &DbOrderHandler{
 		db:            db,
 		priceAdjuster: priceAdjuster,
@@ -116,7 +115,7 @@ func (h *DbOrderHandler) HandleOrderUpdate(update map[string]interface{}) error 
 		eventType, ok := event["type"].(string)
 		if !ok {
 			zap.L().Warn("Missing or invalid event type")
-			eventType = UnknownEventType
+			eventType = common.UnknownEventType
 		}
 
 		// Get orders array from event
@@ -208,9 +207,9 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 	// Get order metadata (upfront amounts)
 	// First try in-memory store, then fallback to database
 	metadataRaw, hasMetadata := h.metadataStore.Get(orderId)
-	userRequestedAmount := DefaultZeroString
-	markupAmount := DefaultZeroString
-	primeOrderQuoteAmount := DefaultZeroString
+	userRequestedAmount := common.DefaultZeroString
+	markupAmount := common.DefaultZeroString
+	primeOrderQuoteAmount := common.DefaultZeroString
 
 	if hasMetadata {
 		// Handle typed metadata from in-memory store
@@ -238,12 +237,12 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 	}
 
 	// Calculate fee settlement for terminal states (all orders for financial reporting)
-	actualFilledValue := DefaultZeroString
-	actualEarnedFee := DefaultZeroString
-	rebateAmount := DefaultZeroString
+	actualFilledValue := common.DefaultZeroString
+	actualEarnedFee := common.DefaultZeroString
+	rebateAmount := common.DefaultZeroString
 	feeSettled := false
 
-	isTerminal := (status == OrderStatusFilled || status == OrderStatusCancelled || status == OrderStatusRejected)
+	isTerminal := (status == common.OrderStatusFilled || status == common.OrderStatusCancelled || status == common.OrderStatusRejected)
 	if isTerminal {
 		settlement := h.calculateFeeSettlement(cumQty, avgPx, userRequestedAmount, markupAmount, primeOrderQuoteAmount)
 		actualFilledValue = settlement.ActualFilledValue
@@ -252,7 +251,7 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 		feeSettled = true
 
 		// Log settlement for quote orders with rebates
-		if settlement.RebateAmount != DefaultZeroString && markupAmount != DefaultZeroString {
+		if settlement.RebateAmount != common.DefaultZeroString && markupAmount != common.DefaultZeroString {
 			zap.L().Info("Fee settlement calculated",
 				zap.String("order_id", orderId[:8]+"..."),
 				zap.String("status", status),
@@ -295,15 +294,15 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 	}
 
 	// Clean up metadata for terminal states
-	if status == OrderStatusFilled || status == OrderStatusCancelled || status == OrderStatusRejected {
+	if status == common.OrderStatusFilled || status == common.OrderStatusCancelled || status == common.OrderStatusRejected {
 		h.metadataStore.Delete(orderId)
 	}
 
 	// Log the update - for terminal states, fills, or status transitions to OPEN
 	cumQtyDec, _ := decimal.NewFromString(cumQty)
 	statusChanged := (existing == nil || existing.Status != status)
-	isTerminalOrFilled := status == OrderStatusFilled || status == OrderStatusCancelled || status == OrderStatusRejected || !cumQtyDec.IsZero()
-	isOpenTransition := (status == OrderStatusOpen && statusChanged)
+	isTerminalOrFilled := status == common.OrderStatusFilled || status == common.OrderStatusCancelled || status == common.OrderStatusRejected || !cumQtyDec.IsZero()
+	isOpenTransition := (status == common.OrderStatusOpen && statusChanged)
 
 	if isTerminalOrFilled || isOpenTransition {
 		zap.L().Info("Order event",
@@ -330,7 +329,7 @@ func getString(m map[string]interface{}, key string) string {
 // Helper function to normalize numeric strings (convert empty to "0")
 func normalizeNumeric(s string) string {
 	if s == "" {
-		return DefaultZeroString
+		return common.DefaultZeroString
 	}
 	return s
 }
@@ -379,8 +378,8 @@ func (h *DbOrderHandler) calculateFeeSettlement(cumQty, avgPx, userRequestedAmou
 	if err != nil || cumQtyDec.IsZero() {
 		// No fill - full rebate
 		return FeeSettlement{
-			ActualFilledValue: DefaultZeroString,
-			ActualEarnedFee:   DefaultZeroString,
+			ActualFilledValue: common.DefaultZeroString,
+			ActualEarnedFee:   common.DefaultZeroString,
 			RebateAmount:      markupAmount,
 		}
 	}
@@ -390,8 +389,8 @@ func (h *DbOrderHandler) calculateFeeSettlement(cumQty, avgPx, userRequestedAmou
 	if err != nil || avgPxDec.IsZero() {
 		// No fill - full rebate
 		return FeeSettlement{
-			ActualFilledValue: DefaultZeroString,
-			ActualEarnedFee:   DefaultZeroString,
+			ActualFilledValue: common.DefaultZeroString,
+			ActualEarnedFee:   common.DefaultZeroString,
 			RebateAmount:      markupAmount,
 		}
 	}
@@ -408,7 +407,7 @@ func (h *DbOrderHandler) calculateFeeSettlement(cumQty, avgPx, userRequestedAmou
 		return FeeSettlement{
 			ActualFilledValue: actualFilledValue.Round(2).String(), // USD cents precision
 			ActualEarnedFee:   actualEarnedFee.Round(2).String(),   // USD cents precision
-			RebateAmount:      DefaultZeroString,                   // No hold to rebate
+			RebateAmount:      common.DefaultZeroString,            // No hold to rebate
 		}
 	}
 
@@ -419,7 +418,7 @@ func (h *DbOrderHandler) calculateFeeSettlement(cumQty, avgPx, userRequestedAmou
 		return FeeSettlement{
 			ActualFilledValue: actualFilledValue.Round(2).String(), // USD cents precision
 			ActualEarnedFee:   markupAmountDec.Round(2).String(),   // USD cents precision
-			RebateAmount:      DefaultZeroString,
+			RebateAmount:      common.DefaultZeroString,
 		}
 	}
 
@@ -434,7 +433,7 @@ func (h *DbOrderHandler) calculateFeeSettlement(cumQty, avgPx, userRequestedAmou
 		// Invalid fee rate - shouldn't happen
 		return FeeSettlement{
 			ActualFilledValue: actualFilledValue.Round(2).String(), // USD cents precision
-			ActualEarnedFee:   DefaultZeroString,
+			ActualEarnedFee:   common.DefaultZeroString,
 			RebateAmount:      markupAmountDec.Round(2).String(), // USD cents precision
 		}
 	}

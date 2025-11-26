@@ -27,7 +27,6 @@ import (
 	"github.com/coinbase-samples/prime-trading-fees-go/config"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/database"
-	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/order"
 	"github.com/joho/godotenv"
 	"github.com/shopspring/decimal"
@@ -199,7 +198,7 @@ func parseAndValidateFlags() (*parsedFlags, error) {
 }
 
 // loadConfigAndSetup loads configuration and sets up dependencies
-func loadConfigAndSetup() (*config.Config, *fees.PriceAdjuster, error) {
+func loadConfigAndSetup() (*config.Config, *common.PriceAdjuster, error) {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load config: %w", err)
@@ -209,12 +208,12 @@ func loadConfigAndSetup() (*config.Config, *fees.PriceAdjuster, error) {
 	config.SetupLogger(cfg.Server.LogLevel, cfg.Server.LogJson)
 
 	// Create fee strategy
-	feeStrategy, err := fees.CreateFeeStrategy(cfg.Fees.Percent)
+	feeStrategy, err := common.CreateFeeStrategy(cfg.Fees.Percent)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create fee strategy: %w", err)
 	}
 
-	adjuster := fees.NewPriceAdjuster(feeStrategy)
+	adjuster := common.NewPriceAdjuster(feeStrategy)
 	return cfg, adjuster, nil
 }
 
@@ -239,7 +238,7 @@ func buildOrderRequest(flags *parsedFlags) common.OrderRequest {
 }
 
 // executePreview generates and displays an order preview
-func executePreview(ctx context.Context, cfg *config.Config, adjuster *fees.PriceAdjuster, req common.OrderRequest) error {
+func executePreview(ctx context.Context, cfg *config.Config, adjuster *common.PriceAdjuster, req common.OrderRequest) error {
 	orderService := order.NewOrderServiceWithPrime(cfg, adjuster, nil)
 
 	response, err := orderService.GeneratePreview(ctx, req)
@@ -251,7 +250,7 @@ func executePreview(ctx context.Context, cfg *config.Config, adjuster *fees.Pric
 }
 
 // executeOrder places an actual order and stores metadata
-func executeOrder(ctx context.Context, cfg *config.Config, adjuster *fees.PriceAdjuster, req common.OrderRequest, unitType string, quantity decimal.Decimal) error {
+func executeOrder(ctx context.Context, cfg *config.Config, adjuster *common.PriceAdjuster, req common.OrderRequest, unitType string, quantity decimal.Decimal) error {
 	orderService := order.NewOrderServiceWithPrime(cfg, adjuster, nil)
 
 	response, err := orderService.PlaceOrder(ctx, req)
@@ -279,7 +278,7 @@ func executeOrder(ctx context.Context, cfg *config.Config, adjuster *fees.PriceA
 	return nil
 }
 
-func storeOrderMetadata(cfg *config.Config, response *common.OrderResponse, req common.OrderRequest, adjuster *fees.PriceAdjuster) error {
+func storeOrderMetadata(cfg *config.Config, response *common.OrderResponse, req common.OrderRequest, adjuster *common.PriceAdjuster) error {
 	// Open database
 	db, err := database.NewOrdersDb(cfg.Database.Path)
 	if err != nil {
