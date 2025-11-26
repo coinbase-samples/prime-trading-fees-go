@@ -80,7 +80,7 @@ func (s *OrderService) GeneratePreview(ctx context.Context, req OrderRequest) (*
 		zap.L().Info("Order Preview requested",
 			zap.String("requested_amount", prepared.Metadata.UserRequestedAmount.String()),
 			zap.String("markup_amount", prepared.Metadata.MarkupAmount.String()),
-			zap.String("prime_preview_amount", prepared.Metadata.PrimeOrderAmount.String()))
+			zap.String("prime_preview_amount", prepared.Metadata.PrimeOrderQuoteAmount.String()))
 	}
 
 	// Add timeout to API call (10 seconds for preview)
@@ -189,7 +189,7 @@ func (s *OrderService) PlaceOrder(ctx context.Context, req OrderRequest) (*Order
 		zap.L().Info("Adjusted order for custom markup",
 			zap.String("requested_amount", prepared.Metadata.UserRequestedAmount.String()),
 			zap.String("custom_fee", prepared.Metadata.MarkupAmount.String()),
-			zap.String("prime_order_amount", prepared.Metadata.PrimeOrderAmount.String()))
+			zap.String("prime_order_amount", prepared.Metadata.PrimeOrderQuoteAmount.String()))
 	}
 
 	// Add timeout to API call (15 seconds for actual order placement)
@@ -205,9 +205,9 @@ func (s *OrderService) PlaceOrder(ctx context.Context, req OrderRequest) (*Order
 	// Store metadata using the order Id from Prime (for websocket handler to retrieve)
 	if s.metadataStore != nil && prepared.Metadata != nil {
 		s.metadataStore.Set(createResp.OrderId, map[string]decimal.Decimal{
-			"UserRequestedAmount": prepared.Metadata.UserRequestedAmount,
-			"MarkupAmount":        prepared.Metadata.MarkupAmount,
-			"PrimeOrderAmount":    prepared.Metadata.PrimeOrderAmount,
+			"UserRequestedAmount":   prepared.Metadata.UserRequestedAmount,
+			"MarkupAmount":          prepared.Metadata.MarkupAmount,
+			"PrimeOrderQuoteAmount": prepared.Metadata.PrimeOrderQuoteAmount,
 		})
 	}
 

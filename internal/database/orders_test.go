@@ -56,29 +56,29 @@ func TestUpsertOrder_Insert(t *testing.T) {
 
 	now := time.Now()
 	order := &OrderRecord{
-		OrderId:             "test-order-1",
-		ClientOrderId:       "client-1",
-		ProductId:           "BTC-USD",
-		Side:                "BUY",
-		OrderType:           "MARKET",
-		Status:              "OPEN",
-		CumQty:              "0.001",
-		LeavesQty:           "0",
-		AvgPx:               "50000",
-		NetAvgPx:            "50100",
-		Fees:                "0.05",
-		Commission:          "0.03",
-		VenueFee:            "0.02",
-		CesCommission:       "",
-		UserRequestedAmount: "10",
-		MarkupAmount:        "0.05",
-		PrimeOrderAmount:    "9.95",
-		ActualFilledValue:   "0",
-		ActualEarnedFee:     "0",
-		RebateAmount:        "0",
-		FeeSettled:          false,
-		FirstSeenAt:         now,
-		LastUpdatedAt:       now,
+		OrderId:               "test-order-1",
+		ClientOrderId:         "client-1",
+		ProductId:             "BTC-USD",
+		Side:                  "BUY",
+		OrderType:             "MARKET",
+		Status:                "OPEN",
+		CumQty:                "0.001",
+		LeavesQty:             "0",
+		AvgPx:                 "50000",
+		NetAvgPx:              "50100",
+		Fees:                  "0.05",
+		Commission:            "0.03",
+		VenueFee:              "0.02",
+		CesCommission:         "",
+		UserRequestedAmount:   "10",
+		MarkupAmount:          "0.05",
+		PrimeOrderQuoteAmount: "9.95",
+		ActualFilledValue:     "0",
+		ActualEarnedFee:       "0",
+		RebateAmount:          "0",
+		FeeSettled:            false,
+		FirstSeenAt:           now,
+		LastUpdatedAt:         now,
 	}
 
 	err = db.UpsertOrder(order)
@@ -129,26 +129,26 @@ func TestUpsertOrder_Update(t *testing.T) {
 
 	// Initial insert
 	order := &OrderRecord{
-		OrderId:             "test-order-2",
-		ClientOrderId:       "client-2",
-		ProductId:           "ETH-USD",
-		Side:                "SELL",
-		OrderType:           "LIMIT",
-		Status:              "OPEN",
-		CumQty:              "0",
-		LeavesQty:           "0.5",
-		AvgPx:               "0",
-		NetAvgPx:            "0",
-		Fees:                "0",
-		UserRequestedAmount: "100",
-		MarkupAmount:        "0.50",
-		PrimeOrderAmount:    "99.50",
-		ActualFilledValue:   "0",
-		ActualEarnedFee:     "0",
-		RebateAmount:        "0",
-		FeeSettled:          false,
-		FirstSeenAt:         now,
-		LastUpdatedAt:       now,
+		OrderId:               "test-order-2",
+		ClientOrderId:         "client-2",
+		ProductId:             "ETH-USD",
+		Side:                  "SELL",
+		OrderType:             "LIMIT",
+		Status:                "OPEN",
+		CumQty:                "0",
+		LeavesQty:             "0.5",
+		AvgPx:                 "0",
+		NetAvgPx:              "0",
+		Fees:                  "0",
+		UserRequestedAmount:   "100",
+		MarkupAmount:          "0.50",
+		PrimeOrderQuoteAmount: "99.50",
+		ActualFilledValue:     "0",
+		ActualEarnedFee:       "0",
+		RebateAmount:          "0",
+		FeeSettled:            false,
+		FirstSeenAt:           now,
+		LastUpdatedAt:         now,
 	}
 
 	err = db.UpsertOrder(order)
@@ -159,26 +159,26 @@ func TestUpsertOrder_Update(t *testing.T) {
 	// Update with fill
 	time.Sleep(time.Millisecond) // Ensure different timestamp
 	updatedOrder := &OrderRecord{
-		OrderId:             "test-order-2",
-		ClientOrderId:       "client-2",
-		ProductId:           "ETH-USD",
-		Side:                "SELL",
-		OrderType:           "LIMIT",
-		Status:              "FILLED",
-		CumQty:              "0.5",
-		LeavesQty:           "0",
-		AvgPx:               "3000",
-		NetAvgPx:            "2990",
-		Fees:                "1.50",
-		UserRequestedAmount: "100",
-		MarkupAmount:        "0.50",
-		PrimeOrderAmount:    "99.50",
-		ActualFilledValue:   "1500",
-		ActualEarnedFee:     "0.50",
-		RebateAmount:        "0",
-		FeeSettled:          true,
-		FirstSeenAt:         now, // Should preserve original
-		LastUpdatedAt:       time.Now(),
+		OrderId:               "test-order-2",
+		ClientOrderId:         "client-2",
+		ProductId:             "ETH-USD",
+		Side:                  "SELL",
+		OrderType:             "LIMIT",
+		Status:                "FILLED",
+		CumQty:                "0.5",
+		LeavesQty:             "0",
+		AvgPx:                 "3000",
+		NetAvgPx:              "2990",
+		Fees:                  "1.50",
+		UserRequestedAmount:   "100",
+		MarkupAmount:          "0.50",
+		PrimeOrderQuoteAmount: "99.50",
+		ActualFilledValue:     "1500",
+		ActualEarnedFee:       "0.50",
+		RebateAmount:          "0",
+		FeeSettled:            true,
+		FirstSeenAt:           now, // Should preserve original
+		LastUpdatedAt:         time.Now(),
 	}
 
 	err = db.UpsertOrder(updatedOrder)
@@ -401,19 +401,19 @@ func TestUpsertOrder_MetadataPreservation(t *testing.T) {
 
 	// Initial order with metadata
 	initialOrder := &OrderRecord{
-		OrderId:             "metadata-test",
-		ClientOrderId:       "client-meta",
-		ProductId:           "BTC-USD",
-		Side:                "BUY",
-		OrderType:           "MARKET",
-		Status:              "OPEN",
-		CumQty:              "0",
-		LeavesQty:           "0.001",
-		UserRequestedAmount: "50",
-		MarkupAmount:        "0.25",
-		PrimeOrderAmount:    "49.75",
-		FirstSeenAt:         now,
-		LastUpdatedAt:       now,
+		OrderId:               "metadata-test",
+		ClientOrderId:         "client-meta",
+		ProductId:             "BTC-USD",
+		Side:                  "BUY",
+		OrderType:             "MARKET",
+		Status:                "OPEN",
+		CumQty:                "0",
+		LeavesQty:             "0.001",
+		UserRequestedAmount:   "50",
+		MarkupAmount:          "0.25",
+		PrimeOrderQuoteAmount: "49.75",
+		FirstSeenAt:           now,
+		LastUpdatedAt:         now,
 	}
 
 	err = db.UpsertOrder(initialOrder)
@@ -423,26 +423,26 @@ func TestUpsertOrder_MetadataPreservation(t *testing.T) {
 
 	// Update from websocket (without metadata fields)
 	updateOrder := &OrderRecord{
-		OrderId:             "metadata-test",
-		ClientOrderId:       "client-meta",
-		ProductId:           "BTC-USD",
-		Side:                "BUY",
-		OrderType:           "MARKET",
-		Status:              "FILLED",
-		CumQty:              "0.001",
-		LeavesQty:           "0",
-		AvgPx:               "50000",
-		NetAvgPx:            "50100",
-		Fees:                "0.05",
-		UserRequestedAmount: "50",    // These should be preserved
-		MarkupAmount:        "0.25",  // These should be preserved
-		PrimeOrderAmount:    "49.75", // These should be preserved
-		ActualFilledValue:   "50",
-		ActualEarnedFee:     "0.25",
-		RebateAmount:        "0",
-		FeeSettled:          true,
-		FirstSeenAt:         now,
-		LastUpdatedAt:       time.Now(),
+		OrderId:               "metadata-test",
+		ClientOrderId:         "client-meta",
+		ProductId:             "BTC-USD",
+		Side:                  "BUY",
+		OrderType:             "MARKET",
+		Status:                "FILLED",
+		CumQty:                "0.001",
+		LeavesQty:             "0",
+		AvgPx:                 "50000",
+		NetAvgPx:              "50100",
+		Fees:                  "0.05",
+		UserRequestedAmount:   "50",    // These should be preserved
+		MarkupAmount:          "0.25",  // These should be preserved
+		PrimeOrderQuoteAmount: "49.75", // These should be preserved
+		ActualFilledValue:     "50",
+		ActualEarnedFee:       "0.25",
+		RebateAmount:          "0",
+		FeeSettled:            true,
+		FirstSeenAt:           now,
+		LastUpdatedAt:         time.Now(),
 	}
 
 	err = db.UpsertOrder(updateOrder)
@@ -462,7 +462,7 @@ func TestUpsertOrder_MetadataPreservation(t *testing.T) {
 	if retrieved.MarkupAmount != "0.25" {
 		t.Errorf("MarkupAmount = %q, want 0.25 (should be preserved)", retrieved.MarkupAmount)
 	}
-	if retrieved.PrimeOrderAmount != "49.75" {
-		t.Errorf("PrimeOrderAmount = %q, want 49.75 (should be preserved)", retrieved.PrimeOrderAmount)
+	if retrieved.PrimeOrderQuoteAmount != "49.75" {
+		t.Errorf("PrimeOrderQuoteAmount = %q, want 49.75 (should be preserved)", retrieved.PrimeOrderQuoteAmount)
 	}
 }

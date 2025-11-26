@@ -50,9 +50,9 @@ type OrderRecord struct {
 	CesCommission string // CES commission
 
 	// User's original request (for quote-denominated orders)
-	UserRequestedAmount string // What the user wanted to spend (e.g., $10)
-	MarkupAmount        string // What we kept upfront as fee hold (e.g., $0.05)
-	PrimeOrderAmount    string // What we sent to Prime (e.g., $9.95)
+	UserRequestedAmount   string // What the user wanted to spend (e.g., $10)
+	MarkupAmount          string // What we kept upfront as fee hold (e.g., $0.05)
+	PrimeOrderQuoteAmount string // What we sent to Prime in quote currency (e.g., $9.95)
 
 	// Fee settlement (calculated at terminal state)
 	ActualFilledValue string // Actual notional value filled: cum_qty * avg_px
@@ -107,6 +107,10 @@ func NewOrdersDb(dbPath string) (*OrdersDb, error) {
 		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
 
+	if err := ordersDb.runMigrations(); err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+
 	return ordersDb, nil
 }
 
@@ -135,7 +139,7 @@ func (db *OrdersDb) createTables() error {
 		-- User's original request (for quote-denominated orders)
 		user_requested_amount TEXT DEFAULT '0',
 		markup_amount TEXT DEFAULT '0',
-		prime_order_amount TEXT DEFAULT '0',
+		prime_order_quote_amount TEXT DEFAULT '0',
 
 		-- Fee settlement (calculated at terminal state)
 		actual_filled_value TEXT DEFAULT '0',
@@ -199,6 +203,32 @@ func (db *OrdersDb) createTables() error {
 	return nil
 }
 
+// runMigrations runs database schema migrations
+func (db *OrdersDb) runMigrations() error {
+	// Migration: Rename prime_order_amount to prime_order_quote_amount (if needed)
+	var columnExists bool
+	err := db.db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('orders')
+		WHERE name='prime_order_amount'
+	`).Scan(&columnExists)
+
+	if err != nil {
+		return fmt.Errorf("failed to check for old column: %w", err)
+	}
+
+	if columnExists {
+		zap.L().Info("Migrating database: renaming prime_order_amount to prime_order_quote_amount")
+		_, err := db.db.Exec(`ALTER TABLE orders RENAME COLUMN prime_order_amount TO prime_order_quote_amount`)
+		if err != nil {
+			return fmt.Errorf("failed to rename column: %w", err)
+		}
+		zap.L().Info("Migration completed successfully")
+	}
+
+	return nil
+}
+
 // UpsertOrder updates or inserts an order record
 func (db *OrdersDb) UpsertOrder(order *OrderRecord) error {
 	query := `
@@ -206,7 +236,7 @@ func (db *OrdersDb) UpsertOrder(order *OrderRecord) error {
 		order_id, client_order_id, product_id, side, order_type, status,
 		cum_qty, leaves_qty, avg_px, net_avg_px, fees,
 		commission, venue_fee, ces_commission,
-		user_requested_amount, markup_amount, prime_order_amount,
+		user_requested_amount, markup_amount, prime_order_quote_amount,
 		actual_filled_value, actual_earned_fee, rebate_amount, fee_settled,
 		first_seen_at, last_updated_at
 	) VALUES (
@@ -229,7 +259,7 @@ func (db *OrdersDb) UpsertOrder(order *OrderRecord) error {
 		ces_commission = excluded.ces_commission,
 		user_requested_amount = COALESCE(NULLIF(orders.user_requested_amount, '0'), excluded.user_requested_amount),
 		markup_amount = COALESCE(NULLIF(orders.markup_amount, '0'), excluded.markup_amount),
-		prime_order_amount = COALESCE(NULLIF(orders.prime_order_amount, '0'), excluded.prime_order_amount),
+		prime_order_quote_amount = COALESCE(NULLIF(orders.prime_order_quote_amount, '0'), excluded.prime_order_quote_amount),
 		actual_filled_value = excluded.actual_filled_value,
 		actual_earned_fee = excluded.actual_earned_fee,
 		rebate_amount = excluded.rebate_amount,
@@ -241,7 +271,7 @@ func (db *OrdersDb) UpsertOrder(order *OrderRecord) error {
 		order.OrderId, order.ClientOrderId, order.ProductId, order.Side, order.OrderType, order.Status,
 		order.CumQty, order.LeavesQty, order.AvgPx, order.NetAvgPx, order.Fees,
 		order.Commission, order.VenueFee, order.CesCommission,
-		order.UserRequestedAmount, order.MarkupAmount, order.PrimeOrderAmount,
+		order.UserRequestedAmount, order.MarkupAmount, order.PrimeOrderQuoteAmount,
 		order.ActualFilledValue, order.ActualEarnedFee, order.RebateAmount, order.FeeSettled,
 		order.FirstSeenAt, order.LastUpdatedAt,
 	)
@@ -285,7 +315,7 @@ func (db *OrdersDb) GetOrder(orderId string) (*OrderRecord, error) {
 		order_id, client_order_id, product_id, side, order_type, status,
 		cum_qty, leaves_qty, avg_px, net_avg_px, fees,
 		commission, venue_fee, ces_commission,
-		user_requested_amount, markup_amount, prime_order_amount,
+		user_requested_amount, markup_amount, prime_order_quote_amount,
 		actual_filled_value, actual_earned_fee, rebate_amount, fee_settled,
 		first_seen_at, last_updated_at
 	FROM orders
@@ -297,7 +327,7 @@ func (db *OrdersDb) GetOrder(orderId string) (*OrderRecord, error) {
 		&order.OrderId, &order.ClientOrderId, &order.ProductId, &order.Side, &order.OrderType, &order.Status,
 		&order.CumQty, &order.LeavesQty, &order.AvgPx, &order.NetAvgPx, &order.Fees,
 		&order.Commission, &order.VenueFee, &order.CesCommission,
-		&order.UserRequestedAmount, &order.MarkupAmount, &order.PrimeOrderAmount,
+		&order.UserRequestedAmount, &order.MarkupAmount, &order.PrimeOrderQuoteAmount,
 		&order.ActualFilledValue, &order.ActualEarnedFee, &order.RebateAmount, &order.FeeSettled,
 		&order.FirstSeenAt, &order.LastUpdatedAt,
 	)

@@ -71,9 +71,9 @@ func PrepareOrderRequest(
 		primeReq.Order.QuoteValue = primeOrderAmount.String()
 
 		metadata = &OrderMetadata{
-			UserRequestedAmount: userRequestedAmount,
-			MarkupAmount:        markupAmount,
-			PrimeOrderAmount:    primeOrderAmount,
+			UserRequestedAmount:   userRequestedAmount,
+			MarkupAmount:          markupAmount,
+			PrimeOrderQuoteAmount: primeOrderAmount,
 		}
 	} else if req.Unit == "base" && !req.BaseQty.IsZero() {
 		primeReq.Order.BaseQuantity = req.BaseQty.String()

@@ -185,13 +185,10 @@ func displayOrderBook(product string, snapshot marketdata.OrderBookSnapshot, adj
 		bestBid := snapshot.Bids[0]
 		bestAsk := snapshot.Asks[0]
 		spread := bestAsk.Price.Sub(bestBid.Price)
-		spreadBps := spread.Div(bestBid.Price).Mul(decimal.NewFromInt(10000))
 
-		fmt.Printf("\n  %-15s %-15s %-15s\n", "", "SPREAD", "")
-		fmt.Printf("  %-15s %-15s %-15s\n", "", "------", "")
-		fmt.Printf("  %-15s %-15s %s bps\n\n", "",
-			spread.StringFixed(2),
-			spreadBps.StringFixed(2))
+		fmt.Printf("\n  %-15s %-15s\n", "", "SPREAD")
+		fmt.Printf("  %-15s %-15s\n", "", "------")
+		fmt.Printf("  %-15s %s\n\n", "", spread.StringFixed(2))
 	}
 
 	// Show bids

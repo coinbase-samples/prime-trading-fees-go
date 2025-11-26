@@ -224,10 +224,11 @@ func TestCalculateFeeSettlement_NoMarkup(t *testing.T) {
 	}
 
 	// Verify fee is calculated (add-on model)
+	// Note: Fee is rounded to 2 decimal places (USD cents)
 	earnedFee, _ := decimal.NewFromString(settlement.ActualEarnedFee)
-	expectedFee := expectedValue.Mul(decimal.NewFromFloat(0.005)) // 85 * 0.005 = 0.425
+	expectedFee := expectedValue.Mul(decimal.NewFromFloat(0.005)).Round(2) // 85 * 0.005 = 0.425 → 0.43
 	if !earnedFee.Equal(expectedFee) {
-		t.Errorf("ActualEarnedFee = %s, want %s (base order add-on fee)", settlement.ActualEarnedFee, expectedFee.String())
+		t.Errorf("ActualEarnedFee = %s, want %s (base order add-on fee, rounded to cents)", settlement.ActualEarnedFee, expectedFee.String())
 	}
 
 	// Verify no rebate (no upfront hold for base orders)

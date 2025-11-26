@@ -232,14 +232,14 @@ func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                     string
-		req                      OrderRequest
-		portfolioId              string
-		generateClientOrderId    bool
-		expectMetadata           bool
-		expectedUserRequested    string
-		expectedMarkup           string
-		expectedPrimeOrderAmount string
+		name                          string
+		req                           OrderRequest
+		portfolioId                   string
+		generateClientOrderId         bool
+		expectMetadata                bool
+		expectedUserRequested         string
+		expectedMarkup                string
+		expectedPrimeOrderQuoteAmount string
 	}{
 		{
 			name: "quote order - $10 with 0.5% fee",
@@ -250,12 +250,12 @@ func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 				QuoteValue: decimal.NewFromFloat(10.0),
 				Unit:       "quote",
 			},
-			portfolioId:              "test-portfolio",
-			generateClientOrderId:    false,
-			expectMetadata:           true,
-			expectedUserRequested:    "10",
-			expectedMarkup:           "0.05", // 10 * 0.005
-			expectedPrimeOrderAmount: "9.95", // 10 - 0.05
+			portfolioId:                   "test-portfolio",
+			generateClientOrderId:         false,
+			expectMetadata:                true,
+			expectedUserRequested:         "10",
+			expectedMarkup:                "0.05", // 10 * 0.005
+			expectedPrimeOrderQuoteAmount: "9.95", // 10 - 0.05
 		},
 		{
 			name: "quote order - $100 with 0.5% fee",
@@ -266,12 +266,12 @@ func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 				QuoteValue: decimal.NewFromFloat(100.0),
 				Unit:       "quote",
 			},
-			portfolioId:              "test-portfolio",
-			generateClientOrderId:    true,
-			expectMetadata:           true,
-			expectedUserRequested:    "100",
-			expectedMarkup:           "0.5",  // 100 * 0.005
-			expectedPrimeOrderAmount: "99.5", // 100 - 0.5
+			portfolioId:                   "test-portfolio",
+			generateClientOrderId:         true,
+			expectMetadata:                true,
+			expectedUserRequested:         "100",
+			expectedMarkup:                "0.5",  // 100 * 0.005
+			expectedPrimeOrderQuoteAmount: "99.5", // 100 - 0.5
 		},
 		{
 			name: "quote order - $1000 with 0.5% fee",
@@ -283,12 +283,12 @@ func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 				Price:      decimal.NewFromFloat(50000.0),
 				Unit:       "quote",
 			},
-			portfolioId:              "test-portfolio",
-			generateClientOrderId:    false,
-			expectMetadata:           true,
-			expectedUserRequested:    "1000",
-			expectedMarkup:           "5",   // 1000 * 0.005
-			expectedPrimeOrderAmount: "995", // 1000 - 5
+			portfolioId:                   "test-portfolio",
+			generateClientOrderId:         false,
+			expectMetadata:                true,
+			expectedUserRequested:         "1000",
+			expectedMarkup:                "5",   // 1000 * 0.005
+			expectedPrimeOrderQuoteAmount: "995", // 1000 - 5
 		},
 	}
 
@@ -328,8 +328,8 @@ func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 			}
 
 			// Check quote value adjustment (Prime gets reduced amount)
-			if prepared.PrimeRequest.Order.QuoteValue != tt.expectedPrimeOrderAmount {
-				t.Errorf("QuoteValue = %q, want %q", prepared.PrimeRequest.Order.QuoteValue, tt.expectedPrimeOrderAmount)
+			if prepared.PrimeRequest.Order.QuoteValue != tt.expectedPrimeOrderQuoteAmount {
+				t.Errorf("QuoteValue = %q, want %q", prepared.PrimeRequest.Order.QuoteValue, tt.expectedPrimeOrderQuoteAmount)
 			}
 
 			// Check limit price for limit orders
@@ -350,8 +350,8 @@ func TestPrepareOrderRequest_QuoteOrders(t *testing.T) {
 				if prepared.Metadata.MarkupAmount.String() != tt.expectedMarkup {
 					t.Errorf("MarkupAmount = %q, want %q", prepared.Metadata.MarkupAmount.String(), tt.expectedMarkup)
 				}
-				if prepared.Metadata.PrimeOrderAmount.String() != tt.expectedPrimeOrderAmount {
-					t.Errorf("PrimeOrderAmount = %q, want %q", prepared.Metadata.PrimeOrderAmount.String(), tt.expectedPrimeOrderAmount)
+				if prepared.Metadata.PrimeOrderQuoteAmount.String() != tt.expectedPrimeOrderQuoteAmount {
+					t.Errorf("PrimeOrderQuoteAmount = %q, want %q", prepared.Metadata.PrimeOrderQuoteAmount.String(), tt.expectedPrimeOrderQuoteAmount)
 				}
 			}
 		})

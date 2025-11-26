@@ -296,17 +296,17 @@ func storeOrderMetadata(cfg *config.Config, response *order.OrderResponse, req o
 
 	// Create preliminary order record
 	orderRecord := &database.OrderRecord{
-		OrderId:             response.OrderId,
-		ClientOrderId:       response.ClientOrderId,
-		ProductId:           response.Product,
-		Side:                response.Side,
-		OrderType:           response.Type,
-		Status:              "PENDING",
-		UserRequestedAmount: userRequestedAmount.String(),
-		MarkupAmount:        MarkupAmount.String(),
-		PrimeOrderAmount:    primeOrderAmount.String(),
-		FirstSeenAt:         time.Now(),
-		LastUpdatedAt:       time.Now(),
+		OrderId:               response.OrderId,
+		ClientOrderId:         response.ClientOrderId,
+		ProductId:             response.Product,
+		Side:                  response.Side,
+		OrderType:             response.Type,
+		Status:                "PENDING",
+		UserRequestedAmount:   userRequestedAmount.String(),
+		MarkupAmount:          MarkupAmount.String(),
+		PrimeOrderQuoteAmount: primeOrderAmount.String(),
+		FirstSeenAt:           time.Now(),
+		LastUpdatedAt:         time.Now(),
 	}
 
 	// Insert preliminary record

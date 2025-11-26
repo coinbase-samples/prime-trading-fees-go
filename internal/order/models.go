@@ -81,9 +81,9 @@ type OrderResponse struct {
 
 // OrderMetadata contains calculated fee information for quote-denominated orders
 type OrderMetadata struct {
-	UserRequestedAmount decimal.Decimal
-	MarkupAmount        decimal.Decimal
-	PrimeOrderAmount    decimal.Decimal
+	UserRequestedAmount   decimal.Decimal
+	MarkupAmount          decimal.Decimal
+	PrimeOrderQuoteAmount decimal.Decimal
 }
 
 // PreparedOrder contains the Prime API request and associated metadata

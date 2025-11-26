@@ -507,7 +507,7 @@ CREATE TABLE orders (
     -- User's original request
     user_requested_amount TEXT DEFAULT '0',
     markup_amount TEXT DEFAULT '0',
-    prime_order_amount TEXT DEFAULT '0',
+    prime_order_quote_amount TEXT DEFAULT '0',
 
     -- Fee settlement (calculated at terminal state)
     actual_filled_value TEXT DEFAULT '0',
