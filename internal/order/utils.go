@@ -27,28 +27,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// OrderMetadata contains calculated fee information for quote-denominated orders
-type OrderMetadata struct {
-	UserRequestedAmount decimal.Decimal
-	MarkupAmount        decimal.Decimal
-	PrimeOrderAmount    decimal.Decimal
-}
-
-// PreparedOrder contains the Prime API request and associated metadata
-type PreparedOrder struct {
-	PrimeRequest  *orders.CreateOrderRequest
-	Metadata      *OrderMetadata
-	NormalizedReq NormalizedOrderRequest
-}
-
-// NormalizedOrderRequest contains the normalized request parameters
-type NormalizedOrderRequest struct {
-	Product       string
-	Side          string // Already normalized to uppercase
-	Type          string // Already normalized to uppercase
-	ClientOrderId string // Generated UUID
-}
-
 // PrepareOrderRequest builds a Prime API order request from user input
 // This consolidates the logic shared between preview and execution
 func PrepareOrderRequest(

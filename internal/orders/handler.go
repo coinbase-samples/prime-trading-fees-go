@@ -116,7 +116,7 @@ func (h *DbOrderHandler) HandleOrderUpdate(update map[string]interface{}) error 
 		eventType, ok := event["type"].(string)
 		if !ok {
 			zap.L().Warn("Missing or invalid event type")
-			eventType = "unknown"
+			eventType = UnknownEventType
 		}
 
 		// Get orders array from event
@@ -155,14 +155,16 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 	side := getString(orderData, "side")
 	orderType := getString(orderData, "order_type")
 	status := getString(orderData, "status")
-	cumQty := getString(orderData, "cum_qty")
-	leavesQty := getString(orderData, "leaves_qty")
-	avgPx := getString(orderData, "avg_px")
-	netAvgPx := getString(orderData, "net_avg_px")
-	feesStr := getString(orderData, "fees")
-	commission := getString(orderData, "commission")
-	venueFee := getString(orderData, "venue_fee")
-	cesCommission := getString(orderData, "ces_commission")
+
+	// Normalize numeric fields (empty string → "0" for storage)
+	cumQty := normalizeNumeric(getString(orderData, "cum_qty"))
+	leavesQty := normalizeNumeric(getString(orderData, "leaves_qty"))
+	avgPx := normalizeNumeric(getString(orderData, "avg_px"))
+	netAvgPx := normalizeNumeric(getString(orderData, "net_avg_px"))
+	feesStr := normalizeNumeric(getString(orderData, "fees"))
+	commission := normalizeNumeric(getString(orderData, "commission"))
+	venueFee := normalizeNumeric(getString(orderData, "venue_fee"))
+	cesCommission := normalizeNumeric(getString(orderData, "ces_commission"))
 
 	// Convert to JSON for event storage
 	rawJSON, err := json.Marshal(orderData)
@@ -206,15 +208,15 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 	// Get order metadata (upfront amounts)
 	// First try in-memory store, then fallback to database
 	metadataRaw, hasMetadata := h.metadataStore.Get(orderId)
-	userRequestedAmount := "0"
-	MarkupAmount := "0"
-	primeOrderAmount := "0"
+	userRequestedAmount := DefaultZeroString
+	markupAmount := DefaultZeroString
+	primeOrderAmount := DefaultZeroString
 
 	if hasMetadata {
 		// Handle typed metadata from in-memory store
 		if meta, ok := metadataRaw.(*order.OrderMetadata); ok {
 			userRequestedAmount = meta.UserRequestedAmount.String()
-			MarkupAmount = meta.MarkupAmount.String()
+			markupAmount = meta.MarkupAmount.String()
 			primeOrderAmount = meta.PrimeOrderAmount.String()
 		} else if metaMap, ok := metadataRaw.(map[string]decimal.Decimal); ok {
 			// Handle map-based metadata (from order placement)
@@ -222,7 +224,7 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 				userRequestedAmount = val.String()
 			}
 			if val, ok := metaMap["MarkupAmount"]; ok {
-				MarkupAmount = val.String()
+				markupAmount = val.String()
 			}
 			if val, ok := metaMap["PrimeOrderAmount"]; ok {
 				primeOrderAmount = val.String()
@@ -231,26 +233,26 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 	} else if existing != nil {
 		// Fallback to database metadata (for orders placed by separate process)
 		userRequestedAmount = existing.UserRequestedAmount
-		MarkupAmount = existing.MarkupAmount
+		markupAmount = existing.MarkupAmount
 		primeOrderAmount = existing.PrimeOrderAmount
 	}
 
-	// Calculate fee settlement for terminal states (quote-denominated orders only)
-	actualFilledValue := "0"
-	actualEarnedFee := "0"
-	rebateAmount := "0"
+	// Calculate fee settlement for terminal states (all orders for financial reporting)
+	actualFilledValue := DefaultZeroString
+	actualEarnedFee := DefaultZeroString
+	rebateAmount := DefaultZeroString
 	feeSettled := false
 
-	isTerminal := (status == "FILLED" || status == "CANCELLED" || status == "REJECTED")
-	if isTerminal && MarkupAmount != "0" && MarkupAmount != "" {
-		settlement := h.calculateFeeSettlement(cumQty, avgPx, userRequestedAmount, MarkupAmount, primeOrderAmount)
+	isTerminal := (status == OrderStatusFilled || status == OrderStatusCancelled || status == OrderStatusRejected)
+	if isTerminal {
+		settlement := h.calculateFeeSettlement(cumQty, avgPx, userRequestedAmount, markupAmount, primeOrderAmount)
 		actualFilledValue = settlement.ActualFilledValue
 		actualEarnedFee = settlement.ActualEarnedFee
 		rebateAmount = settlement.RebateAmount
 		feeSettled = true
 
-		// Log the settlement
-		if settlement.RebateAmount != "0" && settlement.RebateAmount != "" {
+		// Log settlement for quote orders with rebates
+		if settlement.RebateAmount != DefaultZeroString && markupAmount != DefaultZeroString {
 			zap.L().Info("Fee settlement calculated",
 				zap.String("order_id", orderId[:8]+"..."),
 				zap.String("status", status),
@@ -261,7 +263,7 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 	}
 
 	// Upsert order record (UPDATE if exists, INSERT if new)
-	// Round values to reasonable precision before storing
+	// Store exact values from Prime (no rounding) to support all asset pairs
 	orderRecord := &database.OrderRecord{
 		OrderId:             orderId,
 		ClientOrderId:       clientOrderId,
@@ -269,16 +271,16 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 		Side:                side,
 		OrderType:           orderType,
 		Status:              status,
-		CumQty:              roundQtyString(cumQty),
-		LeavesQty:           roundQtyString(leavesQty),
-		AvgPx:               roundPriceString(avgPx),
-		NetAvgPx:            roundPriceString(netAvgPx),
-		Fees:                roundPriceString(feesStr),
-		Commission:          roundPriceString(commission),
-		VenueFee:            roundPriceString(venueFee),
-		CesCommission:       roundPriceString(cesCommission),
+		CumQty:              cumQty,        // Exact value from Prime
+		LeavesQty:           leavesQty,     // Exact value from Prime
+		AvgPx:               avgPx,         // Exact value from Prime
+		NetAvgPx:            netAvgPx,      // Exact value from Prime
+		Fees:                feesStr,       // Exact value from Prime
+		Commission:          commission,    // Exact value from Prime
+		VenueFee:            venueFee,      // Exact value from Prime
+		CesCommission:       cesCommission, // Exact value from Prime
 		UserRequestedAmount: userRequestedAmount,
-		MarkupAmount:        MarkupAmount,
+		MarkupAmount:        markupAmount,
 		PrimeOrderAmount:    primeOrderAmount,
 		ActualFilledValue:   actualFilledValue,
 		ActualEarnedFee:     actualEarnedFee,
@@ -293,15 +295,15 @@ func (h *DbOrderHandler) processOrderUpdate(orderData map[string]interface{}, ev
 	}
 
 	// Clean up metadata for terminal states
-	if status == "FILLED" || status == "CANCELLED" || status == "REJECTED" {
+	if status == OrderStatusFilled || status == OrderStatusCancelled || status == OrderStatusRejected {
 		h.metadataStore.Delete(orderId)
 	}
 
 	// Log the update - for terminal states, fills, or status transitions to OPEN
 	cumQtyDec, _ := decimal.NewFromString(cumQty)
 	statusChanged := (existing == nil || existing.Status != status)
-	isTerminalOrFilled := status == "FILLED" || status == "CANCELLED" || status == "REJECTED" || !cumQtyDec.IsZero()
-	isOpenTransition := (status == "OPEN" && statusChanged)
+	isTerminalOrFilled := status == OrderStatusFilled || status == OrderStatusCancelled || status == OrderStatusRejected || !cumQtyDec.IsZero()
+	isOpenTransition := (status == OrderStatusOpen && statusChanged)
 
 	if isTerminalOrFilled || isOpenTransition {
 		zap.L().Info("Order event",
@@ -325,32 +327,20 @@ func getString(m map[string]interface{}, key string) string {
 	return ""
 }
 
-// roundPriceString rounds a price string to 2 decimal places
-func roundPriceString(s string) string {
-	if s == "" || s == "0" {
-		return s
+// Helper function to normalize numeric strings (convert empty to "0")
+func normalizeNumeric(s string) string {
+	if s == "" {
+		return DefaultZeroString
 	}
-	d, err := decimal.NewFromString(s)
-	if err != nil {
-		return s
-	}
-	return d.Round(2).String()
+	return s
 }
 
-// roundQtyString rounds a quantity string to 8 decimal places
-func roundQtyString(s string) string {
-	if s == "" || s == "0" {
-		return s
-	}
-	d, err := decimal.NewFromString(s)
-	if err != nil {
-		return s
-	}
-	return d.Round(8).String()
-}
-
-// Note: We keep these string-based rounding functions here because they handle empty strings
-// and errors gracefully for websocket data. The order.RoundPrice/RoundQty work on decimals directly.
+// Note: We do NOT round ANY values (quantities or prices) before storage.
+// Prime WebSocket sends exact decimal values that must be preserved to support:
+// - All asset quantity precisions (BTC=8 decimals, ETH=18 decimals, USDC=6 decimals)
+// - All quote currency precisions (USD=2, BTC=8, ETH=18)
+// - All trading pairs (BTC-USD, ETH-BTC, MATIC-USDC, etc.)
+// This prevents data loss and ensures accurate financial reporting across all markets.
 
 // FeeSettlement represents the calculated fee settlement for a terminal order
 type FeeSettlement struct {
@@ -359,65 +349,79 @@ type FeeSettlement struct {
 	RebateAmount      string
 }
 
-// calculateFeeSettlement calculates the actual fee earned and rebate amount
-// based on the actual filled amount vs the upfront fee hold.
+// calculateFeeSettlement calculates the actual fee earned and rebate amount.
+// Handles both quote orders (fee hold model) and base orders (add-on model).
 //
-// Example: User requested $10, we held $0.05 fee (50 bps), sent $9.95 to Prime
+// Quote Order Example: User requested $10, we held $0.05 fee (50 bps), sent $9.95 to Prime
 // - 100% fill: Prime filled $9.95, earned fee = $0.05, rebate = $0
 // - 50% fill: Prime filled $4.975, earned fee = $0.025, rebate = $0.025
 // - 0% fill: Prime filled $0, earned fee = $0, rebate = $0.05
 //
-// Math:
+// Base Order Example: User sold 1 BTC, we charge fee on top
+// - Filled: 1 BTC at $43,250 = $43,250 notional
+// - earned_fee = $43,250 * 0.005 = $216.25 (add-on fee)
+// - rebate = $0 (no upfront hold)
+//
+// Math for quote orders:
 // - fee_rate = markup / user_requested
-// - actual_filled_value = cum_qty * avg_px (what Prime actually filled)
-// - actual_user_cost = actual_filled_value / (1 - fee_rate) (what user should pay including fee)
+// - actual_filled_value = cum_qty * avg_px
+// - actual_user_cost = actual_filled_value / (1 - fee_rate)
 // - actual_earned_fee = actual_user_cost * fee_rate
 // - rebate = markup - actual_earned_fee
+//
+// Math for base orders:
+// - actual_filled_value = cum_qty * avg_px
+// - actual_earned_fee = actual_filled_value * fee_percent (from price adjuster)
+// - rebate = 0
 func (h *DbOrderHandler) calculateFeeSettlement(cumQty, avgPx, userRequestedAmount, markupAmount, primeOrderAmount string) FeeSettlement {
-	// Parse inputs
+	// Parse cumQty
 	cumQtyDec, err := decimal.NewFromString(cumQty)
 	if err != nil || cumQtyDec.IsZero() {
 		// No fill - full rebate
 		return FeeSettlement{
-			ActualFilledValue: "0",
-			ActualEarnedFee:   "0",
+			ActualFilledValue: DefaultZeroString,
+			ActualEarnedFee:   DefaultZeroString,
 			RebateAmount:      markupAmount,
 		}
 	}
 
+	// Parse avgPx
 	avgPxDec, err := decimal.NewFromString(avgPx)
 	if err != nil || avgPxDec.IsZero() {
 		// No fill - full rebate
 		return FeeSettlement{
-			ActualFilledValue: "0",
-			ActualEarnedFee:   "0",
+			ActualFilledValue: DefaultZeroString,
+			ActualEarnedFee:   DefaultZeroString,
 			RebateAmount:      markupAmount,
 		}
 	}
 
+	// Calculate actual filled value (needed for all orders)
+	actualFilledValue := cumQtyDec.Mul(avgPxDec)
+
+	// Parse markupAmount
 	markupAmountDec, err := decimal.NewFromString(markupAmount)
 	if err != nil || markupAmountDec.IsZero() {
-		// No markup - no settlement needed
+		// Base order (no upfront markup) - calculate add-on fee
+		// Fee is charged on top of Prime's execution cost
+		actualEarnedFee := h.priceAdjuster.FeeStrategy.ComputeFromNotional(actualFilledValue)
 		return FeeSettlement{
-			ActualFilledValue: roundPriceString(cumQtyDec.Mul(avgPxDec).String()),
-			ActualEarnedFee:   "0",
-			RebateAmount:      "0",
+			ActualFilledValue: actualFilledValue.String(),
+			ActualEarnedFee:   actualEarnedFee.String(),
+			RebateAmount:      DefaultZeroString, // No hold to rebate
 		}
 	}
 
+	// Parse userRequestedAmount (for quote orders)
 	userRequestedDec, err := decimal.NewFromString(userRequestedAmount)
 	if err != nil || userRequestedDec.IsZero() {
-		// Can't calculate without user requested amount - be conservative and rebate nothing
-		actualFilledValue := cumQtyDec.Mul(avgPxDec)
+		// Quote order but missing user requested amount - be conservative and keep full markup
 		return FeeSettlement{
-			ActualFilledValue: roundPriceString(actualFilledValue.String()),
-			ActualEarnedFee:   roundPriceString(markupAmountDec.String()),
-			RebateAmount:      "0",
+			ActualFilledValue: actualFilledValue.String(),
+			ActualEarnedFee:   markupAmountDec.String(),
+			RebateAmount:      DefaultZeroString,
 		}
 	}
-
-	// Calculate actual filled notional value: cum_qty * avg_px
-	actualFilledValue := cumQtyDec.Mul(avgPxDec)
 
 	// Calculate the fee rate from the original order
 	// fee_rate = markup / user_requested
@@ -429,9 +433,9 @@ func (h *DbOrderHandler) calculateFeeSettlement(cumQty, avgPx, userRequestedAmou
 	if oneMinusFeeRate.LessThanOrEqual(decimal.Zero) {
 		// Invalid fee rate - shouldn't happen
 		return FeeSettlement{
-			ActualFilledValue: roundPriceString(actualFilledValue.String()),
-			ActualEarnedFee:   "0",
-			RebateAmount:      roundPriceString(markupAmountDec.String()),
+			ActualFilledValue: actualFilledValue.String(),
+			ActualEarnedFee:   DefaultZeroString,
+			RebateAmount:      markupAmountDec.String(),
 		}
 	}
 
@@ -453,8 +457,8 @@ func (h *DbOrderHandler) calculateFeeSettlement(cumQty, avgPx, userRequestedAmou
 	}
 
 	return FeeSettlement{
-		ActualFilledValue: roundPriceString(actualFilledValue.String()),
-		ActualEarnedFee:   roundPriceString(actualEarnedFee.String()),
-		RebateAmount:      roundPriceString(rebateAmount.String()),
+		ActualFilledValue: actualFilledValue.String(),
+		ActualEarnedFee:   actualEarnedFee.String(),
+		RebateAmount:      rebateAmount.String(),
 	}
 }

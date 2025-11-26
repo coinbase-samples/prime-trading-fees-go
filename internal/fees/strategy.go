@@ -57,26 +57,26 @@ func NewPriceAdjuster(feeStrategy *FeeStrategy) *PriceAdjuster {
 
 // AdjustBidPrice reduces bid price to account for fee when user is selling
 func (a *PriceAdjuster) AdjustBidPrice(price, qty decimal.Decimal) decimal.Decimal {
-	fee := a.FeeStrategy.Compute(qty, price)
-	notional := qty.Mul(price)
-	adjustedNotional := notional.Sub(fee)
-
 	if qty.IsZero() {
 		return price
 	}
+
+	fee := a.FeeStrategy.Compute(qty, price)
+	notional := qty.Mul(price)
+	adjustedNotional := notional.Sub(fee)
 
 	return adjustedNotional.Div(qty)
 }
 
 // AdjustAskPrice increases ask price to account for fee when user is buying
 func (a *PriceAdjuster) AdjustAskPrice(price, qty decimal.Decimal) decimal.Decimal {
-	fee := a.FeeStrategy.Compute(qty, price)
-	notional := qty.Mul(price)
-	adjustedNotional := notional.Add(fee)
-
 	if qty.IsZero() {
 		return price
 	}
+
+	fee := a.FeeStrategy.Compute(qty, price)
+	notional := qty.Mul(price)
+	adjustedNotional := notional.Add(fee)
 
 	return adjustedNotional.Div(qty)
 }

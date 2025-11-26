@@ -19,6 +19,7 @@ package orders
 import (
 	"testing"
 
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/fees"
 	"github.com/shopspring/decimal"
 )
 
@@ -197,31 +198,41 @@ func TestCalculateFeeSettlement_ZeroPrice(t *testing.T) {
 }
 
 func TestCalculateFeeSettlement_NoMarkup(t *testing.T) {
-	handler := &DbOrderHandler{}
+	// Create handler with fee strategy for base order calculations
+	feeStrategy := fees.NewFeeStrategy(decimal.NewFromFloat(0.005)) // 0.5% fee
+	priceAdjuster := fees.NewPriceAdjuster(feeStrategy)
+	handler := &DbOrderHandler{
+		priceAdjuster: priceAdjuster,
+	}
 
-	// Scenario: Order with no markup (shouldn't happen in practice)
-	// Expected: No fee settlement needed
+	// Scenario: Base order with no upfront markup (add-on fee model)
+	// User sold 0.001 BTC at $85,000 = $85 filled value
+	// Expected: Fee charged on top = $85 * 0.005 = $0.425
 	settlement := handler.calculateFeeSettlement(
 		"0.001", // cumQty
 		"85000", // avgPx
-		"10",    // userRequestedAmount
-		"0",     // markupAmount (no markup)
-		"10",    // primeOrderAmount
+		"0",     // userRequestedAmount (no upfront hold for base orders)
+		"0",     // markupAmount (no upfront hold for base orders)
+		"0",     // primeOrderAmount (sent full qty to Prime)
 	)
 
+	// Verify filled value
 	filledValue, _ := decimal.NewFromString(settlement.ActualFilledValue)
-	expectedValue := decimal.NewFromFloat(0.001).Mul(decimal.NewFromInt(85000))
-
+	expectedValue := decimal.NewFromFloat(0.001).Mul(decimal.NewFromInt(85000)) // 0.001 * 85000 = 85
 	if !filledValue.Equal(expectedValue) {
 		t.Errorf("ActualFilledValue = %s, want %s", settlement.ActualFilledValue, expectedValue.String())
 	}
 
-	if settlement.ActualEarnedFee != "0" {
-		t.Errorf("ActualEarnedFee = %s, want 0", settlement.ActualEarnedFee)
+	// Verify fee is calculated (add-on model)
+	earnedFee, _ := decimal.NewFromString(settlement.ActualEarnedFee)
+	expectedFee := expectedValue.Mul(decimal.NewFromFloat(0.005)) // 85 * 0.005 = 0.425
+	if !earnedFee.Equal(expectedFee) {
+		t.Errorf("ActualEarnedFee = %s, want %s (base order add-on fee)", settlement.ActualEarnedFee, expectedFee.String())
 	}
 
+	// Verify no rebate (no upfront hold for base orders)
 	if settlement.RebateAmount != "0" {
-		t.Errorf("RebateAmount = %s, want 0", settlement.RebateAmount)
+		t.Errorf("RebateAmount = %s, want 0 (no upfront hold for base orders)", settlement.RebateAmount)
 	}
 }
 
@@ -349,48 +360,5 @@ func TestGetString(t *testing.T) {
 	}
 }
 
-func TestRoundPriceString(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"valid price", "100.556", "100.56"},
-		{"already rounded", "100.50", "100.5"},
-		{"zero", "0", "0"},
-		{"empty string", "", ""},          // Returns unchanged
-		{"invalid", "invalid", "invalid"}, // Returns unchanged
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := roundPriceString(tt.input)
-			if result != tt.expected {
-				t.Errorf("roundPriceString(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestRoundQtyString(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"valid quantity", "0.123456789", "0.12345679"},
-		{"already rounded", "0.12345678", "0.12345678"},
-		{"zero", "0", "0"},
-		{"empty string", "", ""},          // Returns unchanged
-		{"invalid", "invalid", "invalid"}, // Returns unchanged
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := roundQtyString(tt.input)
-			if result != tt.expected {
-				t.Errorf("roundQtyString(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
+// Note: Rounding function tests removed - we store exact values from Prime
+// to support all asset precisions and quote currencies across all trading pairs.

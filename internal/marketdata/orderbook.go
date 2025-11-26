@@ -18,25 +18,20 @@ package marketdata
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"github.com/shopspring/decimal"
 )
-
-// PriceLevel represents a single price level in the order book
-type PriceLevel struct {
-	Price decimal.Decimal
-	Size  decimal.Decimal
-}
 
 // OrderBook maintains the current state of bids and asks for a product
 type OrderBook struct {
-	mu         sync.RWMutex
-	Product    string
-	Bids       []PriceLevel // Sorted descending by price
-	Asks       []PriceLevel // Sorted ascending by price
-	UpdateTime time.Time
-	Sequence   uint64
+	mu           sync.Mutex // only writers use this
+	Product      string
+	Bids         []PriceLevel // Sorted descending by price
+	Asks         []PriceLevel // Sorted ascending by price
+	UpdateTime   time.Time
+	Sequence     uint64
+	bestBidValue atomic.Value // stores PriceLevel or nil
+	bestAskValue atomic.Value // stores PriceLevel or nil
 }
 
 // NewOrderBook creates a new order book for a product
@@ -58,34 +53,43 @@ func (ob *OrderBook) Update(bids, asks []PriceLevel, sequence uint64) {
 	ob.Asks = asks
 	ob.Sequence = sequence
 	ob.UpdateTime = time.Now()
+
+	// Update atomic best bid/ask
+	if len(bids) > 0 {
+		ob.bestBidValue.Store(bids[0])
+	} else {
+		ob.bestBidValue.Store(nil)
+	}
+
+	if len(asks) > 0 {
+		ob.bestAskValue.Store(asks[0])
+	} else {
+		ob.bestAskValue.Store(nil)
+	}
 }
 
 // GetBestBid returns the highest bid price and size
 func (ob *OrderBook) GetBestBid() (PriceLevel, bool) {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
-
-	if len(ob.Bids) > 0 {
-		return ob.Bids[0], true
+	v := ob.bestBidValue.Load()
+	if v == nil {
+		return PriceLevel{}, false
 	}
-	return PriceLevel{}, false
+	return v.(PriceLevel), true
 }
 
 // GetBestAsk returns the lowest ask price and size
 func (ob *OrderBook) GetBestAsk() (PriceLevel, bool) {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
-
-	if len(ob.Asks) > 0 {
-		return ob.Asks[0], true
+	v := ob.bestAskValue.Load()
+	if v == nil {
+		return PriceLevel{}, false
 	}
-	return PriceLevel{}, false
+	return v.(PriceLevel), true
 }
 
 // GetTopLevels returns the top N levels of bids and asks
 func (ob *OrderBook) GetTopLevels(n int) (bids []PriceLevel, asks []PriceLevel) {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
+	ob.mu.Lock()
+	defer ob.mu.Unlock()
 
 	bidCount := n
 	if len(ob.Bids) < bidCount {
@@ -108,8 +112,8 @@ func (ob *OrderBook) GetTopLevels(n int) (bids []PriceLevel, asks []PriceLevel) 
 
 // Snapshot returns a copy of the current order book state
 func (ob *OrderBook) Snapshot() OrderBookSnapshot {
-	ob.mu.RLock()
-	defer ob.mu.RUnlock()
+	ob.mu.Lock()
+	defer ob.mu.Unlock()
 
 	bids := make([]PriceLevel, len(ob.Bids))
 	copy(bids, ob.Bids)
@@ -124,15 +128,6 @@ func (ob *OrderBook) Snapshot() OrderBookSnapshot {
 		UpdateTime: ob.UpdateTime,
 		Sequence:   ob.Sequence,
 	}
-}
-
-// OrderBookSnapshot is an immutable snapshot of the order book
-type OrderBookSnapshot struct {
-	Product    string
-	Bids       []PriceLevel
-	Asks       []PriceLevel
-	UpdateTime time.Time
-	Sequence   uint64
 }
 
 // OrderBookStore manages multiple order books
