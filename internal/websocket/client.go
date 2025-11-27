@@ -226,3 +226,55 @@ func (c *BaseWebSocketClient) handleMessage(message []byte) error {
 	// Delegate to channel-specific handler
 	return c.handler.HandleMessage(baseMsg)
 }
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+// CommonConfig holds fields shared by all websocket channel configs
+type CommonConfig struct {
+	Url              string
+	AccessKey        string
+	Passphrase       string
+	SigningKey       string
+	ServiceAccountId string
+	Products         []string
+	ReconnectDelay   time.Duration
+}
+
+// joinProductIds concatenates product IDs for signature generation
+// Example: ["BTC-USD", "ETH-USD"] -> "BTC-USDETH-USD"
+func joinProductIds(products []string) string {
+	result := ""
+	for _, p := range products {
+		result += p
+	}
+	return result
+}
+
+// buildBaseSubscriptionMessage creates the common subscription message structure
+// Individual channels can extend this with channel-specific fields
+func buildBaseSubscriptionMessage(channel, accessKey, serviceAccountId, timestamp, passphrase, signature string, products []string) map[string]interface{} {
+	return map[string]interface{}{
+		"type":        "subscribe",
+		"channel":     channel,
+		"access_key":  accessKey,
+		"api_key_id":  serviceAccountId,
+		"timestamp":   timestamp,
+		"passphrase":  passphrase,
+		"signature":   signature,
+		"product_ids": products,
+	}
+}
+
+// baseConfigFromCommon creates a BaseConfig from CommonConfig
+func baseConfigFromCommon(common CommonConfig) BaseConfig {
+	return BaseConfig{
+		Url:              common.Url,
+		AccessKey:        common.AccessKey,
+		Passphrase:       common.Passphrase,
+		SigningKey:       common.SigningKey,
+		ServiceAccountId: common.ServiceAccountId,
+		ReconnectDelay:   common.ReconnectDelay,
+	}
+}

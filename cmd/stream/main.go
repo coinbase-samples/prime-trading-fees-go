@@ -89,15 +89,17 @@ func run() error {
 
 	// Start market data feed
 	wsConfig := websocket.MarketDataConfig{
-		Url:              cfg.MarketData.WebSocketUrl,
-		AccessKey:        cfg.Prime.AccessKey,
-		Passphrase:       cfg.Prime.Passphrase,
-		SigningKey:       cfg.Prime.SigningKey,
-		ServiceAccountId: cfg.Prime.ServiceAccountId,
-		Portfolio:        cfg.Prime.Portfolio,
-		Products:         products,
-		MaxLevels:        cfg.MarketData.MaxLevels,
-		ReconnectDelay:   cfg.MarketData.ReconnectDelay,
+		CommonConfig: websocket.CommonConfig{
+			Url:              cfg.MarketData.WebSocketUrl,
+			AccessKey:        cfg.Prime.AccessKey,
+			Passphrase:       cfg.Prime.Passphrase,
+			SigningKey:       cfg.Prime.SigningKey,
+			ServiceAccountId: cfg.Prime.ServiceAccountId,
+			Products:         products,
+			ReconnectDelay:   cfg.MarketData.ReconnectDelay,
+		},
+		Portfolio: cfg.Prime.Portfolio,
+		MaxLevels: cfg.MarketData.MaxLevels,
 	}
 	wsClient := websocket.NewMarketDataClient(wsConfig, store)
 

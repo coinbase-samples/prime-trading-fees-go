@@ -17,21 +17,13 @@
 package websocket
 
 import (
-	"time"
-
 	"go.uber.org/zap"
 )
 
 // OrdersConfig holds configuration for the Prime Orders WebSocket connection
 type OrdersConfig struct {
-	Url              string
-	AccessKey        string
-	Passphrase       string
-	SigningKey       string
-	ServiceAccountId string
-	PortfolioId      string
-	Products         []string
-	ReconnectDelay   time.Duration
+	CommonConfig
+	PortfolioId string
 }
 
 // OrderUpdateHandler processes order updates from the websocket
@@ -53,15 +45,7 @@ func NewOrdersClient(config OrdersConfig, handler OrderUpdateHandler) *OrdersCli
 		handler: handler,
 	}
 
-	baseConfig := BaseConfig{
-		Url:              config.Url,
-		AccessKey:        config.AccessKey,
-		Passphrase:       config.Passphrase,
-		SigningKey:       config.SigningKey,
-		ServiceAccountId: config.ServiceAccountId,
-		ReconnectDelay:   config.ReconnectDelay,
-	}
-
+	baseConfig := baseConfigFromCommon(config.CommonConfig)
 	client.baseClient = NewBaseWebSocketClient(baseConfig, client)
 	return client
 }
@@ -85,29 +69,28 @@ func (c *OrdersClient) GetChannelName() string {
 
 // BuildSignatureMessage builds the message string to be signed
 func (c *OrdersClient) BuildSignatureMessage(baseConfig BaseConfig, timestamp string) string {
-	// Concatenate all product IDs for signature (e.g., "BTC-USDETH-USD")
-	productIdsJoined := ""
-	for _, p := range c.config.Products {
-		productIdsJoined += p
-	}
-
 	// Format: channel + accessKey + serviceAccountId + timestamp + portfolioId + joinedProductIDs
+	productIdsJoined := joinProductIds(c.config.Products)
 	return c.GetChannelName() + baseConfig.AccessKey + baseConfig.ServiceAccountId + timestamp + c.config.PortfolioId + productIdsJoined
 }
 
 // BuildSubscriptionMessage builds the subscription payload
 func (c *OrdersClient) BuildSubscriptionMessage(baseConfig BaseConfig, timestamp string, signature string) map[string]interface{} {
-	return map[string]interface{}{
-		"type":         "subscribe",
-		"channel":      c.GetChannelName(),
-		"access_key":   baseConfig.AccessKey,
-		"api_key_id":   baseConfig.ServiceAccountId,
-		"timestamp":    timestamp,
-		"passphrase":   baseConfig.Passphrase,
-		"signature":    signature,
-		"portfolio_id": c.config.PortfolioId,
-		"product_ids":  c.config.Products,
-	}
+	// Start with base subscription message
+	msg := buildBaseSubscriptionMessage(
+		c.GetChannelName(),
+		baseConfig.AccessKey,
+		baseConfig.ServiceAccountId,
+		timestamp,
+		baseConfig.Passphrase,
+		signature,
+		c.config.Products,
+	)
+
+	// Add orders-specific field
+	msg["portfolio_id"] = c.config.PortfolioId
+
+	return msg
 }
 
 // HandleMessage processes messages for the orders channel

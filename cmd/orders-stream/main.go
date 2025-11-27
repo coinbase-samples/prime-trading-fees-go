@@ -99,14 +99,16 @@ func run() error {
 
 	// Create orders websocket config
 	wsConfig := websocket.OrdersConfig{
-		Url:              cfg.MarketData.WebSocketUrl,
-		AccessKey:        cfg.Prime.AccessKey,
-		Passphrase:       cfg.Prime.Passphrase,
-		SigningKey:       cfg.Prime.SigningKey,
-		ServiceAccountId: cfg.Prime.ServiceAccountId,
-		PortfolioId:      cfg.Prime.Portfolio,
-		Products:         productIds,
-		ReconnectDelay:   cfg.MarketData.ReconnectDelay,
+		CommonConfig: websocket.CommonConfig{
+			Url:              cfg.MarketData.WebSocketUrl,
+			AccessKey:        cfg.Prime.AccessKey,
+			Passphrase:       cfg.Prime.Passphrase,
+			SigningKey:       cfg.Prime.SigningKey,
+			ServiceAccountId: cfg.Prime.ServiceAccountId,
+			Products:         productIds,
+			ReconnectDelay:   cfg.MarketData.ReconnectDelay,
+		},
+		PortfolioId: cfg.Prime.Portfolio,
 	}
 
 	// Create and start websocket client
