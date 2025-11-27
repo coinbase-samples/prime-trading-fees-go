@@ -161,7 +161,7 @@ Bid: $43,028.78  ($43,245 × 0.995)
 #### Running the Code
 
 ```bash
-go run cmd/stream/main.go --symbols=BTC-USD,ETH-USD
+prime stream --symbols=BTC-USD,ETH-USD
 ```
 
 **Output:**
@@ -287,13 +287,13 @@ This is higher than Prime's execution price because it includes both Prime's com
 
 ```bash
 # Quote-denominated market buy
-go run cmd/order/main.go --symbol=BTC-USD --side=buy --unit=quote --qty=10 --type=market
+prime order --symbol=BTC-USD --side=buy --unit=quote --qty=10 --type=market
 
 # Quote-denominated limit buy
-go run cmd/order/main.go --symbol=BTC-USD --side=buy --unit=quote --qty=10 --price 40000 --type=limit           
+prime order --symbol=BTC-USD --side=buy --unit=quote --qty=10 --price=40000 --type=limit
 
 # Base-denominated market sell
-go run cmd/order/main.go --symbol=BTC-USD --side=sell --qty=0.001 --type=market
+prime order --symbol=BTC-USD --side=sell --qty=0.001 --type=market
 ```
 
 Note that on buys, the default unit is `quote` and on sells, the default unit is `base`. This aligns with common implementation patterns. Additionally, the default order type is always `market` unless type is specified otherwise. 
@@ -315,7 +315,7 @@ Note that on buys, the default unit is `quote` and on sells, the default unit is
 Start the websocket client to receive real-time order updates:
 
 ```bash
-go run cmd/orders-stream/main.go --symbols=BTC-USD,ETH-USD
+prime orders-stream --symbols=BTC-USD,ETH-USD
 ```
 
 **Key files:**
@@ -347,10 +347,10 @@ go run cmd/orders-stream/main.go --symbols=BTC-USD,ETH-USD
 **Command:**
 ```bash
 # Quote-denominated: Buy $1000 of BTC at limit price $88,000
-go run cmd/rfq/main.go --symbol=BTC-USD --side=buy --qty=1000 --price=88000
+prime rfq --symbol=BTC-USD --side=buy --qty=1000 --price=88000
 
 # Base-denominated: Sell 0.5 BTC at limit price $43,000
-go run cmd/rfq/main.go --symbol=BTC-USD --side=sell --qty=0.5 --price=43000 --auto-accept
+prime rfq --symbol=BTC-USD --side=sell --qty=0.5 --price=43000 --auto-accept
 ```
 
 **Fee Application (Same as Regular Orders):**

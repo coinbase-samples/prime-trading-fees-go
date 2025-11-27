@@ -19,9 +19,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"os"
 
 	"github.com/coinbase-samples/prime-sdk-go/client"
 	"github.com/coinbase-samples/prime-sdk-go/credentials"
@@ -29,34 +27,47 @@ import (
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/config"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/rfq"
-	"github.com/joho/godotenv"
 	"github.com/shopspring/decimal"
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
 var (
-	// RFQ flags
-	symbol     = flag.String("symbol", "", "Product symbol (e.g., BTC-USD)")
-	side       = flag.String("side", "", "Order side: buy or sell")
-	qty        = flag.String("qty", "", "Order quantity (interpreted based on --unit)")
-	unit       = flag.String("unit", "", "Unit for quantity: 'base' (e.g., BTC) or 'quote' (e.g., USD). Defaults: buy=quote, sell=base")
-	price      = flag.String("price", "", "Limit price (REQUIRED for RFQ)")
-	autoAccept = flag.Bool("auto-accept", false, "Automatically accept the quote (default: false, just show quote)")
+	rfqSymbol     string
+	rfqSide       string
+	rfqQty        string
+	rfqUnit       string
+	rfqPrice      string
+	rfqAutoAccept bool
 )
 
-func main() {
-	flag.Parse()
+var rfqCmd = &cobra.Command{
+	Use:   "rfq",
+	Short: "Request for Quote (RFQ) workflow",
+	Long:  `Create and optionally accept a Request for Quote (RFQ) on Coinbase Prime. RFQs require a limit price.`,
+	Example: `  # Create RFQ for buying $10,000 of BTC at $50,000 limit
+  prime rfq --symbol BTC-USD --side buy --qty 10000 --price 50000
 
-	// Load .env file
-	_ = godotenv.Load()
-
-	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+  # Create and auto-accept RFQ
+  prime rfq --symbol BTC-USD --side buy --qty 10000 --price 50000 --auto-accept`,
+	RunE: runRfq,
 }
 
-type parsedFlags struct {
+func init() {
+	rfqCmd.Flags().StringVar(&rfqSymbol, "symbol", "", "Product symbol (e.g., BTC-USD) [required]")
+	rfqCmd.Flags().StringVar(&rfqSide, "side", "", "Order side: buy or sell [required]")
+	rfqCmd.Flags().StringVar(&rfqQty, "qty", "", "Order quantity (interpreted based on --unit) [required]")
+	rfqCmd.Flags().StringVar(&rfqUnit, "unit", "", "Unit for quantity: 'base' (e.g., BTC) or 'quote' (e.g., USD). Defaults: buy=quote, sell=base")
+	rfqCmd.Flags().StringVar(&rfqPrice, "price", "", "Limit price [required for RFQ]")
+	rfqCmd.Flags().BoolVar(&rfqAutoAccept, "auto-accept", false, "Automatically accept the quote (default: false, just show quote)")
+
+	rfqCmd.MarkFlagRequired("symbol")
+	rfqCmd.MarkFlagRequired("side")
+	rfqCmd.MarkFlagRequired("qty")
+	rfqCmd.MarkFlagRequired("price")
+}
+
+type parsedRfqFlags struct {
 	symbol     string
 	side       string
 	unitType   string
@@ -65,24 +76,19 @@ type parsedFlags struct {
 	autoAccept bool
 }
 
-func run() error {
+func runRfq(cmd *cobra.Command, args []string) error {
 	// Parse and validate flags
-	flags, err := parseAndValidateFlags()
+	flags, err := parseAndValidateRfqFlags()
 	if err != nil {
 		return err
 	}
 
 	// Load configuration
-	cfg, adjuster, primeClient, err := loadConfigAndSetup()
+	cfg, adjuster, primeClient, err := loadRfqConfigAndSetup()
 	if err != nil {
 		return err
 	}
-	defer func(l *zap.Logger) {
-		err := l.Sync()
-		if err != nil {
-			// Ignore sync errors
-		}
-	}(zap.L())
+	defer zap.L().Sync()
 
 	// Build RFQ request
 	req := buildRfqRequest(flags)
@@ -125,29 +131,29 @@ func run() error {
 	return nil
 }
 
-func parseAndValidateFlags() (*parsedFlags, error) {
+func parseAndValidateRfqFlags() (*parsedRfqFlags, error) {
 	// Validate required flags
-	if *symbol == "" {
+	if rfqSymbol == "" {
 		return nil, fmt.Errorf("--symbol is required")
 	}
-	if *side == "" {
+	if rfqSide == "" {
 		return nil, fmt.Errorf("--side is required (buy or sell)")
 	}
-	if *qty == "" {
+	if rfqQty == "" {
 		return nil, fmt.Errorf("--qty is required")
 	}
-	if *price == "" {
+	if rfqPrice == "" {
 		return nil, fmt.Errorf("--price is required for RFQ (limit price)")
 	}
 
 	// Normalize and validate side
-	sideUpper := common.NormalizeSide(*side)
+	sideUpper := common.NormalizeSide(rfqSide)
 	if sideUpper != "BUY" && sideUpper != "SELL" {
-		return nil, fmt.Errorf("--side must be 'buy' or 'sell', got: %s", *side)
+		return nil, fmt.Errorf("--side must be 'buy' or 'sell', got: %s", rfqSide)
 	}
 
 	// Determine unit with smart defaults
-	unitType := *unit
+	unitType := rfqUnit
 	if unitType == "" {
 		// Smart defaults: buy in quote (USD), sell in base (BTC/ETH)
 		if sideUpper == "BUY" {
@@ -163,17 +169,17 @@ func parseAndValidateFlags() (*parsedFlags, error) {
 	} else if unitType == "quote" || unitType == "QUOTE" {
 		unitType = "quote"
 	} else {
-		return nil, fmt.Errorf("--unit must be 'base' or 'quote', got: %s", *unit)
+		return nil, fmt.Errorf("--unit must be 'base' or 'quote', got: %s", rfqUnit)
 	}
 
 	// Parse quantity
-	quantity, err := decimal.NewFromString(*qty)
+	quantity, err := decimal.NewFromString(rfqQty)
 	if err != nil {
 		return nil, fmt.Errorf("invalid quantity: %w", err)
 	}
 
 	// Parse limit price (required for RFQ)
-	limitPrice, err := decimal.NewFromString(*price)
+	limitPrice, err := decimal.NewFromString(rfqPrice)
 	if err != nil {
 		return nil, fmt.Errorf("invalid price: %w", err)
 	}
@@ -181,17 +187,17 @@ func parseAndValidateFlags() (*parsedFlags, error) {
 		return nil, fmt.Errorf("--price must be positive")
 	}
 
-	return &parsedFlags{
-		symbol:     *symbol,
+	return &parsedRfqFlags{
+		symbol:     rfqSymbol,
 		side:       sideUpper,
 		unitType:   unitType,
 		quantity:   quantity,
 		limitPrice: limitPrice,
-		autoAccept: *autoAccept,
+		autoAccept: rfqAutoAccept,
 	}, nil
 }
 
-func loadConfigAndSetup() (*config.Config, *common.PriceAdjuster, orders.OrdersService, error) {
+func loadRfqConfigAndSetup() (*config.Config, *common.PriceAdjuster, orders.OrdersService, error) {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load config: %w", err)
@@ -224,7 +230,7 @@ func loadConfigAndSetup() (*config.Config, *common.PriceAdjuster, orders.OrdersS
 	return cfg, adjuster, primeClient, nil
 }
 
-func buildRfqRequest(flags *parsedFlags) common.RfqRequest {
+func buildRfqRequest(flags *parsedRfqFlags) common.RfqRequest {
 	req := common.RfqRequest{
 		Product:    flags.symbol,
 		Side:       flags.side,

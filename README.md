@@ -51,11 +51,19 @@ PRIME_SERVICE_ACCOUNT_ID=your_service_account_id
 FEE_PERCENT=0.005    # 50 bps (0.5%) for all orders
 ```
 
-### 2. Run Examples
+### 2. Install the CLI
+
+```bash
+go install ./cmd/prime
+```
+
+This installs the `prime` CLI tool to your `$GOPATH/bin` (make sure it's in your `$PATH`).
+
+### 3. Run Examples
 
 **1. Stream market data with fee-adjusted prices (optional):**
 ```bash
-go run cmd/stream/main.go --symbols=BTC-USD,ETH-USD
+prime stream --symbols=BTC-USD,ETH-USD
 ```
 
 This displays Prime's live order book with **your fees already included** in the prices. Updates refresh every 5 seconds (configurable in `.env` via `MARKET_DATA_DISPLAY_UPDATE_RATE`). The displayed prices are calculated in real-time by adding your markup to Prime's WebSocket data feed.
@@ -63,24 +71,24 @@ This displays Prime's live order book with **your fees already included** in the
 **2. Preview an order (simulates execution):**
 ```bash
 # Quote-denominated (default for buys): "buy $100 worth of BTC"
-go run cmd/order/main.go --symbol=BTC-USD --side=buy --unit=quote --qty=100 --mode=preview
+prime order --symbol=BTC-USD --side=buy --unit=quote --qty=100 --mode=preview
 
 # Base-denominated (default for sells): "sell 0.5 BTC"
-go run cmd/order/main.go --symbol=BTC-USD --side=sell --unit=base --qty=0.5 --mode=preview
+prime order --symbol=BTC-USD --side=sell --unit=base --qty=0.5 --mode=preview
 ```
 
 Preview mode calls Prime's [Create Order Preview](https://docs.cdp.coinbase.com/api-reference/prime-api/rest-api/orders/get-order-preview) API to **simulate** what would happen if you placed this order right now, showing estimated execution price, Coinbase fees, and total cost based on current market conditions. No actual order is placed.
 
 **3. Track order execution (start this BEFORE placing real orders):**
 ```bash
-go run cmd/orders-stream/main.go --symbols=BTC-USD,ETH-USD
+prime orders-stream --symbols=BTC-USD,ETH-USD
 ```
 
 This WebSocket client listens for order updates in real-time, specific to the products you subscribe to. **You must start this before placing orders** so you don't miss any execution updates. It automatically calculates fee settlements for partial fills. Leave this running in a separate terminal.
 
 **4. Place an actual order:**
 ```bash
-go run cmd/order/main.go --symbol=BTC-USD --side=buy --unit=quote --qty=100 --mode=execute
+prime order --symbol=BTC-USD --side=buy --unit=quote --qty=100 --mode=execute
 ```
 
 This places a real order with Prime. **Prerequisite:** The orders WebSocket (#3) must already be running to capture execution updates and handle fee settlement. You'll see real-time updates in the WebSocket terminal as the order executes.
@@ -88,13 +96,24 @@ This places a real order with Prime. **Prerequisite:** The orders WebSocket (#3)
 **5. Request For Quote (RFQ) - Get guaranteed price before executing (optional):**
 ```bash
 # Preview quote only
-go run cmd/rfq/main.go --symbol=BTC-USD --side=buy --unit=quote --qty=1000 --price=88000
+prime rfq --symbol=BTC-USD --side=buy --unit=quote --qty=1000 --price=88000
 
 # Get quote and auto-accept
-go run cmd/rfq/main.go --symbol=BTC-USD --side=buy --unit=quote --qty=1000 --price=88000 --auto-accept
+prime rfq --symbol=BTC-USD --side=buy --unit=quote --qty=1000 --price=88000 --auto-accept
 ```
 
 RFQ provides a guaranteed price quote with expiration time. Unlike market orders that execute immediately, RFQ lets you see the exact execution price before deciding. **Note:** Marketable limit prices are required for all RFQ requests.
+
+### CLI Help
+
+Get help for any command:
+```bash
+prime --help
+prime order --help
+prime stream --help
+prime orders-stream --help
+prime rfq --help
+```
 
 ## Sample Output
 

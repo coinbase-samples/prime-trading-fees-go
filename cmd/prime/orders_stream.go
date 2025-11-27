@@ -17,7 +17,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -28,27 +27,28 @@ import (
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/config"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/database"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/websocket"
-	"github.com/joho/godotenv"
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
 var (
-	symbols = flag.String("symbols", "BTC-USD,ETH-USD", "Comma-separated list of product symbols to subscribe to")
+	ordersStreamSymbols string
 )
 
-func main() {
-	flag.Parse()
-
-	// Load .env file
-	_ = godotenv.Load()
-
-	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+var ordersStreamCmd = &cobra.Command{
+	Use:   "orders-stream",
+	Short: "Stream live order updates",
+	Long:  `Connects to Coinbase Prime WebSocket and monitors order execution updates, storing them in a local database.`,
+	Example: `  prime orders-stream --symbols BTC-USD,ETH-USD
+  prime orders-stream --symbols BTC-USD`,
+	RunE: runOrdersStream,
 }
 
-func run() error {
+func init() {
+	ordersStreamCmd.Flags().StringVar(&ordersStreamSymbols, "symbols", "BTC-USD,ETH-USD", "Comma-separated list of product symbols to subscribe to")
+}
+
+func runOrdersStream(cmd *cobra.Command, args []string) error {
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -61,8 +61,8 @@ func run() error {
 
 	// Parse symbols
 	productIds := []string{}
-	if *symbols != "" {
-		productIds = strings.Split(*symbols, ",")
+	if ordersStreamSymbols != "" {
+		productIds = strings.Split(ordersStreamSymbols, ",")
 		for i := range productIds {
 			productIds[i] = strings.TrimSpace(productIds[i])
 		}

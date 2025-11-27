@@ -23,8 +23,8 @@ import (
 
 	"github.com/coinbase-samples/prime-sdk-go/model"
 	"github.com/coinbase-samples/prime-sdk-go/orders"
-	"github.com/coinbase-samples/prime-trading-fees-go/config"
 	"github.com/coinbase-samples/prime-trading-fees-go/internal/common"
+	"github.com/coinbase-samples/prime-trading-fees-go/internal/config"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"

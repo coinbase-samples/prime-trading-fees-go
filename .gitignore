@@ -11,6 +11,8 @@ bin/
 /order
 /orders-stream
 /stream
+/rfq
+/prime
 /test-settlement
 
 # Test binary, built with `go test -c`
