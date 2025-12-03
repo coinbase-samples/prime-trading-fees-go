@@ -68,7 +68,7 @@ type parsedFlags struct {
 
 func run() error {
 	// Parse and validate flags
-	flags, err := parseAndValidateFlags()
+	flags, err := parseAndValidateFlags(*symbol, *side, *qty, *unit, *price, *autoAccept)
 	if err != nil {
 		return err
 	}
@@ -126,29 +126,29 @@ func run() error {
 	return nil
 }
 
-func parseAndValidateFlags() (*parsedFlags, error) {
+func parseAndValidateFlags(symbolVal, sideVal, qtyVal, unitVal, priceVal string, autoAcceptVal bool) (*parsedFlags, error) {
 	// Validate required flags
-	if *symbol == "" {
+	if symbolVal == "" {
 		return nil, fmt.Errorf("--symbol is required")
 	}
-	if *side == "" {
+	if sideVal == "" {
 		return nil, fmt.Errorf("--side is required (buy or sell)")
 	}
-	if *qty == "" {
+	if qtyVal == "" {
 		return nil, fmt.Errorf("--qty is required")
 	}
-	if *price == "" {
+	if priceVal == "" {
 		return nil, fmt.Errorf("--price is required for RFQ (limit price)")
 	}
 
 	// Normalize and validate side
-	sideUpper := common.NormalizeSide(*side)
+	sideUpper := common.NormalizeSide(sideVal)
 	if sideUpper != "BUY" && sideUpper != "SELL" {
-		return nil, fmt.Errorf("--side must be 'buy' or 'sell', got: %s", *side)
+		return nil, fmt.Errorf("--side must be 'buy' or 'sell', got: %s", sideVal)
 	}
 
 	// Determine unit with smart defaults
-	unitType := *unit
+	unitType := unitVal
 	if unitType == "" {
 		// Smart defaults: buy in quote (USD), sell in base (BTC/ETH)
 		if sideUpper == "BUY" {
@@ -164,17 +164,17 @@ func parseAndValidateFlags() (*parsedFlags, error) {
 	} else if strings.EqualFold(unitType, "quote") {
 		unitType = "quote"
 	} else {
-		return nil, fmt.Errorf("--unit must be 'base' or 'quote', got: %s", *unit)
+		return nil, fmt.Errorf("--unit must be 'base' or 'quote', got: %s", unitVal)
 	}
 
 	// Parse quantity
-	quantity, err := decimal.NewFromString(*qty)
+	quantity, err := decimal.NewFromString(qtyVal)
 	if err != nil {
 		return nil, fmt.Errorf("invalid quantity: %w", err)
 	}
 
 	// Parse limit price (required for RFQ)
-	limitPrice, err := decimal.NewFromString(*price)
+	limitPrice, err := decimal.NewFromString(priceVal)
 	if err != nil {
 		return nil, fmt.Errorf("invalid price: %w", err)
 	}
@@ -183,12 +183,12 @@ func parseAndValidateFlags() (*parsedFlags, error) {
 	}
 
 	return &parsedFlags{
-		symbol:     *symbol,
+		symbol:     symbolVal,
 		side:       sideUpper,
 		unitType:   unitType,
 		quantity:   quantity,
 		limitPrice: limitPrice,
-		autoAccept: *autoAccept,
+		autoAccept: autoAcceptVal,
 	}, nil
 }
 

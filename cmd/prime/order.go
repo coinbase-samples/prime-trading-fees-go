@@ -84,7 +84,7 @@ type parsedOrderFlags struct {
 
 func runOrder(cmd *cobra.Command, args []string) error {
 	// Parse and validate command line flags
-	flags, err := parseAndValidateOrderFlags()
+	flags, err := parseAndValidateOrderFlags(orderSymbol, orderSide, orderQty, orderUnit, orderType, orderPrice, orderMode)
 	if err != nil {
 		return err
 	}
@@ -106,26 +106,26 @@ func runOrder(cmd *cobra.Command, args []string) error {
 	return executeOrder(ctx, cfg, adjuster, req, flags.unitType, flags.quantity)
 }
 
-func parseAndValidateOrderFlags() (*parsedOrderFlags, error) {
+func parseAndValidateOrderFlags(symbol, side, qty, unit, oType, price, mode string) (*parsedOrderFlags, error) {
 	// Validate required flags (already handled by MarkFlagRequired, but double-check)
-	if orderSymbol == "" {
+	if symbol == "" {
 		return nil, fmt.Errorf("--symbol is required")
 	}
-	if orderSide == "" {
+	if side == "" {
 		return nil, fmt.Errorf("--side is required (buy or sell)")
 	}
-	if orderQty == "" {
+	if qty == "" {
 		return nil, fmt.Errorf("--qty is required")
 	}
 
 	// Normalize and validate side
-	sideUpper := common.NormalizeSide(orderSide)
+	sideUpper := common.NormalizeSide(side)
 	if sideUpper != "BUY" && sideUpper != "SELL" {
-		return nil, fmt.Errorf("--side must be 'buy' or 'sell', got: %s", orderSide)
+		return nil, fmt.Errorf("--side must be 'buy' or 'sell', got: %s", side)
 	}
 
 	// Determine unit with smart defaults
-	unitType := orderUnit
+	unitType := unit
 	if unitType == "" {
 		// Smart defaults: buy in quote (USD), sell in base (BTC/ETH)
 		if sideUpper == "BUY" {
@@ -141,51 +141,51 @@ func parseAndValidateOrderFlags() (*parsedOrderFlags, error) {
 	} else if strings.EqualFold(unitType, "quote") {
 		unitType = "quote"
 	} else {
-		return nil, fmt.Errorf("--unit must be 'base' or 'quote', got: %s", orderUnit)
+		return nil, fmt.Errorf("--unit must be 'base' or 'quote', got: %s", unit)
 	}
 
 	// Normalize and validate order type
-	typeUpper := common.NormalizeOrderType(orderType)
+	typeUpper := common.NormalizeOrderType(oType)
 	if typeUpper != "MARKET" && typeUpper != "LIMIT" {
-		return nil, fmt.Errorf("--type must be 'market' or 'limit', got: %s", orderType)
+		return nil, fmt.Errorf("--type must be 'market' or 'limit', got: %s", oType)
 	}
 
 	// Validate and normalize mode
 	isPreview := false
-	modeValue := orderMode
+	modeValue := mode
 	if strings.EqualFold(modeValue, "preview") {
 		isPreview = true
 	} else if strings.EqualFold(modeValue, "execute") {
 		isPreview = false
 	} else {
-		return nil, fmt.Errorf("--mode must be 'preview' or 'execute', got: %s", orderMode)
+		return nil, fmt.Errorf("--mode must be 'preview' or 'execute', got: %s", mode)
 	}
 
 	// Parse quantity
-	quantity, err := decimal.NewFromString(orderQty)
+	quantity, err := decimal.NewFromString(qty)
 	if err != nil {
 		return nil, fmt.Errorf("invalid quantity: %w", err)
 	}
 
 	// Parse limit price if provided
 	var limitPrice decimal.Decimal
-	if orderPrice != "" {
-		limitPrice, err = decimal.NewFromString(orderPrice)
+	if price != "" {
+		limitPrice, err = decimal.NewFromString(price)
 		if err != nil {
 			return nil, fmt.Errorf("invalid price: %w", err)
 		}
 	}
 
 	// Validate type/price combination
-	if typeUpper == "LIMIT" && orderPrice == "" {
+	if typeUpper == "LIMIT" && price == "" {
 		return nil, fmt.Errorf("--price is required for limit orders")
 	}
-	if typeUpper == "MARKET" && orderPrice != "" {
+	if typeUpper == "MARKET" && price != "" {
 		return nil, fmt.Errorf("--price should not be specified for market orders")
 	}
 
 	return &parsedOrderFlags{
-		symbol:     orderSymbol,
+		symbol:     symbol,
 		side:       sideUpper,
 		orderType:  typeUpper,
 		unitType:   unitType,

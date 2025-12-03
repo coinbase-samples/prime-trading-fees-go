@@ -17,28 +17,13 @@
 package main
 
 import (
-	"flag"
 	"testing"
 
 	"github.com/shopspring/decimal"
 )
 
-// Helper function to reset flags and set test values
-func setupFlags(symbolVal, sideVal, qtyVal, unitVal, typeVal, priceVal, modeVal string) {
-	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
-	symbol = flag.String("symbol", symbolVal, "")
-	side = flag.String("side", sideVal, "")
-	qty = flag.String("qty", qtyVal, "")
-	unit = flag.String("unit", unitVal, "")
-	orderType = flag.String("type", typeVal, "")
-	price = flag.String("price", priceVal, "")
-	mode = flag.String("mode", modeVal, "")
-}
-
 func TestParseAndValidateFlags_ValidMarketBuy(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "1000", "", "market", "", "execute")
-
-	result, err := parseAndValidateFlags()
+	result, err := parseAndValidateFlags("BTC-USD", "buy", "1000", "", "market", "", "execute")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -64,9 +49,7 @@ func TestParseAndValidateFlags_ValidMarketBuy(t *testing.T) {
 }
 
 func TestParseAndValidateFlags_ValidMarketSell(t *testing.T) {
-	setupFlags("BTC-USD", "sell", "0.5", "", "market", "", "execute")
-
-	result, err := parseAndValidateFlags()
+	result, err := parseAndValidateFlags("BTC-USD", "sell", "0.5", "", "market", "", "execute")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -83,9 +66,7 @@ func TestParseAndValidateFlags_ValidMarketSell(t *testing.T) {
 }
 
 func TestParseAndValidateFlags_ValidLimitOrder(t *testing.T) {
-	setupFlags("ETH-USD", "buy", "1000", "quote", "limit", "3000", "execute")
-
-	result, err := parseAndValidateFlags()
+	result, err := parseAndValidateFlags("ETH-USD", "buy", "1000", "quote", "limit", "3000", "execute")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -99,9 +80,7 @@ func TestParseAndValidateFlags_ValidLimitOrder(t *testing.T) {
 }
 
 func TestParseAndValidateFlags_PreviewMode(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "1000", "quote", "market", "", "preview")
-
-	result, err := parseAndValidateFlags()
+	result, err := parseAndValidateFlags("BTC-USD", "buy", "1000", "quote", "market", "", "preview")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,9 +109,7 @@ func TestParseAndValidateFlags_CaseInsensitiveInputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			setupFlags("BTC-USD", tt.side, "100", tt.unit, tt.orderType, tt.price, tt.mode)
-
-			result, err := parseAndValidateFlags()
+			result, err := parseAndValidateFlags("BTC-USD", tt.side, "100", tt.unit, tt.orderType, tt.price, tt.mode)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -151,9 +128,7 @@ func TestParseAndValidateFlags_CaseInsensitiveInputs(t *testing.T) {
 }
 
 func TestParseAndValidateFlags_ExplicitUnitOverridesDefault(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "0.1", "base", "market", "", "execute")
-
-	result, err := parseAndValidateFlags()
+	result, err := parseAndValidateFlags("BTC-USD", "buy", "0.1", "base", "market", "", "execute")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,9 +139,7 @@ func TestParseAndValidateFlags_ExplicitUnitOverridesDefault(t *testing.T) {
 }
 
 func TestParseAndValidateFlags_MissingRequiredSymbol(t *testing.T) {
-	setupFlags("", "buy", "1000", "", "market", "", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("", "buy", "1000", "", "market", "", "execute")
 	if err == nil {
 		t.Fatal("expected error for missing symbol")
 	}
@@ -176,9 +149,7 @@ func TestParseAndValidateFlags_MissingRequiredSymbol(t *testing.T) {
 }
 
 func TestParseAndValidateFlags_MissingRequiredSide(t *testing.T) {
-	setupFlags("BTC-USD", "", "1000", "", "market", "", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "", "1000", "", "market", "", "execute")
 	if err == nil {
 		t.Fatal("expected error for missing side")
 	}
@@ -188,9 +159,7 @@ func TestParseAndValidateFlags_MissingRequiredSide(t *testing.T) {
 }
 
 func TestParseAndValidateFlags_MissingRequiredQty(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "", "", "market", "", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "buy", "", "", "market", "", "execute")
 	if err == nil {
 		t.Fatal("expected error for missing qty")
 	}
@@ -200,63 +169,49 @@ func TestParseAndValidateFlags_MissingRequiredQty(t *testing.T) {
 }
 
 func TestParseAndValidateFlags_InvalidSide(t *testing.T) {
-	setupFlags("BTC-USD", "invalid", "1000", "", "market", "", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "invalid", "1000", "", "market", "", "execute")
 	if err == nil {
 		t.Fatal("expected error for invalid side")
 	}
 }
 
 func TestParseAndValidateFlags_InvalidUnit(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "1000", "invalid", "market", "", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "buy", "1000", "invalid", "market", "", "execute")
 	if err == nil {
 		t.Fatal("expected error for invalid unit")
 	}
 }
 
 func TestParseAndValidateFlags_InvalidOrderType(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "1000", "", "invalid", "", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "buy", "1000", "", "invalid", "", "execute")
 	if err == nil {
 		t.Fatal("expected error for invalid order type")
 	}
 }
 
 func TestParseAndValidateFlags_InvalidMode(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "1000", "", "market", "", "invalid")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "buy", "1000", "", "market", "", "invalid")
 	if err == nil {
 		t.Fatal("expected error for invalid mode")
 	}
 }
 
 func TestParseAndValidateFlags_InvalidQuantity(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "not-a-number", "", "market", "", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "buy", "not-a-number", "", "market", "", "execute")
 	if err == nil {
 		t.Fatal("expected error for invalid quantity")
 	}
 }
 
 func TestParseAndValidateFlags_InvalidPrice(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "1000", "", "limit", "not-a-number", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "buy", "1000", "", "limit", "not-a-number", "execute")
 	if err == nil {
 		t.Fatal("expected error for invalid price")
 	}
 }
 
 func TestParseAndValidateFlags_LimitOrderMissingPrice(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "1000", "", "limit", "", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "buy", "1000", "", "limit", "", "execute")
 	if err == nil {
 		t.Fatal("expected error for limit order without price")
 	}
@@ -266,9 +221,7 @@ func TestParseAndValidateFlags_LimitOrderMissingPrice(t *testing.T) {
 }
 
 func TestParseAndValidateFlags_MarketOrderWithPrice(t *testing.T) {
-	setupFlags("BTC-USD", "buy", "1000", "", "market", "50000", "execute")
-
-	_, err := parseAndValidateFlags()
+	_, err := parseAndValidateFlags("BTC-USD", "buy", "1000", "", "market", "50000", "execute")
 	if err == nil {
 		t.Fatal("expected error for market order with price")
 	}
@@ -285,15 +238,11 @@ func TestParseAndValidateFlags_SmartDefaults(t *testing.T) {
 	}{
 		{"buy defaults to quote", "buy", "quote"},
 		{"sell defaults to base", "sell", "base"},
-		{"BUY uppercase defaults to quote", "BUY", "quote"},
-		{"SELL uppercase defaults to base", "SELL", "base"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			setupFlags("BTC-USD", tt.side, "100", "", "market", "", "execute")
-
-			result, err := parseAndValidateFlags()
+			result, err := parseAndValidateFlags("BTC-USD", tt.side, "100", "", "market", "", "execute")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

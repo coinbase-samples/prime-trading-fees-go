@@ -79,7 +79,7 @@ type parsedRfqFlags struct {
 
 func runRfq(cmd *cobra.Command, args []string) error {
 	// Parse and validate flags
-	flags, err := parseAndValidateRfqFlags()
+	flags, err := parseAndValidateRfqFlags(rfqSymbol, rfqSide, rfqQty, rfqUnit, rfqPrice, rfqAutoAccept)
 	if err != nil {
 		return err
 	}
@@ -132,29 +132,29 @@ func runRfq(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func parseAndValidateRfqFlags() (*parsedRfqFlags, error) {
+func parseAndValidateRfqFlags(symbol, side, qty, unit, price string, autoAccept bool) (*parsedRfqFlags, error) {
 	// Validate required flags
-	if rfqSymbol == "" {
+	if symbol == "" {
 		return nil, fmt.Errorf("--symbol is required")
 	}
-	if rfqSide == "" {
+	if side == "" {
 		return nil, fmt.Errorf("--side is required (buy or sell)")
 	}
-	if rfqQty == "" {
+	if qty == "" {
 		return nil, fmt.Errorf("--qty is required")
 	}
-	if rfqPrice == "" {
+	if price == "" {
 		return nil, fmt.Errorf("--price is required for RFQ (limit price)")
 	}
 
 	// Normalize and validate side
-	sideUpper := common.NormalizeSide(rfqSide)
+	sideUpper := common.NormalizeSide(side)
 	if sideUpper != "BUY" && sideUpper != "SELL" {
-		return nil, fmt.Errorf("--side must be 'buy' or 'sell', got: %s", rfqSide)
+		return nil, fmt.Errorf("--side must be 'buy' or 'sell', got: %s", side)
 	}
 
 	// Determine unit with smart defaults
-	unitType := rfqUnit
+	unitType := unit
 	if unitType == "" {
 		// Smart defaults: buy in quote (USD), sell in base (BTC/ETH)
 		if sideUpper == "BUY" {
@@ -170,17 +170,17 @@ func parseAndValidateRfqFlags() (*parsedRfqFlags, error) {
 	} else if strings.EqualFold(unitType, "quote") {
 		unitType = "quote"
 	} else {
-		return nil, fmt.Errorf("--unit must be 'base' or 'quote', got: %s", rfqUnit)
+		return nil, fmt.Errorf("--unit must be 'base' or 'quote', got: %s", unit)
 	}
 
 	// Parse quantity
-	quantity, err := decimal.NewFromString(rfqQty)
+	quantity, err := decimal.NewFromString(qty)
 	if err != nil {
 		return nil, fmt.Errorf("invalid quantity: %w", err)
 	}
 
 	// Parse limit price (required for RFQ)
-	limitPrice, err := decimal.NewFromString(rfqPrice)
+	limitPrice, err := decimal.NewFromString(price)
 	if err != nil {
 		return nil, fmt.Errorf("invalid price: %w", err)
 	}
@@ -189,12 +189,12 @@ func parseAndValidateRfqFlags() (*parsedRfqFlags, error) {
 	}
 
 	return &parsedRfqFlags{
-		symbol:     rfqSymbol,
+		symbol:     symbol,
 		side:       sideUpper,
 		unitType:   unitType,
 		quantity:   quantity,
 		limitPrice: limitPrice,
-		autoAccept: rfqAutoAccept,
+		autoAccept: autoAccept,
 	}, nil
 }
 

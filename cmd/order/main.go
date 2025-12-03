@@ -58,7 +58,7 @@ func main() {
 
 func run() error {
 	// Parse and validate command line flags
-	flags, err := parseAndValidateFlags()
+	flags, err := parseAndValidateFlags(*symbol, *side, *qty, *unit, *orderType, *price, *mode)
 	if err != nil {
 		return err
 	}
