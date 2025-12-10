@@ -32,6 +32,7 @@ func TestCalculateFeeSettlement_FullFill(t *testing.T) {
 	settlement := handler.calculateFeeSettlement(
 		"0.00011718", // cumQty (filled quantity in BTC)
 		"85036.73",   // avgPx (average price)
+		"0",          // filledValue (not provided for quote orders, will calculate)
 		"10",         // userRequestedAmount ($10)
 		"0.05",       // markupAmount ($0.05 fee)
 		"9.95",       // primeOrderAmount ($9.95 sent to Prime)
@@ -98,6 +99,7 @@ func TestCalculateFeeSettlement_PartialFill(t *testing.T) {
 	settlement := handler.calculateFeeSettlement(
 		"0.000995", // cumQty (half of what was ordered)
 		"50000",    // avgPx
+		"0",        // filledValue (not provided for quote orders, will calculate)
 		"100",      // userRequestedAmount
 		"0.50",     // markupAmount
 		"99.50",    // primeOrderAmount
@@ -152,6 +154,7 @@ func TestCalculateFeeSettlement_NoFill(t *testing.T) {
 	settlement := handler.calculateFeeSettlement(
 		"0",     // cumQty (no fill)
 		"85000", // avgPx
+		"0",     // filledValue
 		"10",    // userRequestedAmount
 		"0.05",  // markupAmount
 		"9.95",  // primeOrderAmount
@@ -178,6 +181,7 @@ func TestCalculateFeeSettlement_ZeroPrice(t *testing.T) {
 	settlement := handler.calculateFeeSettlement(
 		"0.001", // cumQty
 		"0",     // avgPx (invalid)
+		"0",     // filledValue
 		"10",    // userRequestedAmount
 		"0.05",  // markupAmount
 		"9.95",  // primeOrderAmount
@@ -211,6 +215,7 @@ func TestCalculateFeeSettlement_NoMarkup(t *testing.T) {
 	settlement := handler.calculateFeeSettlement(
 		"0.001", // cumQty
 		"85000", // avgPx
+		"85",    // filledValue (from Prime - used directly for base orders)
 		"0",     // userRequestedAmount (no upfront hold for base orders)
 		"0",     // markupAmount (no upfront hold for base orders)
 		"0",     // primeOrderAmount (sent full qty to Prime)
@@ -246,6 +251,7 @@ func TestCalculateFeeSettlement_SmallOrder(t *testing.T) {
 	settlement := handler.calculateFeeSettlement(
 		"0.0000588", // cumQty (amount of BTC)
 		"85000",     // avgPx
+		"0",         // filledValue (not provided for quote orders, will calculate)
 		"5",         // userRequestedAmount ($5)
 		"0.025",     // markupAmount ($0.025 fee = 0.5%)
 		"4.975",     // primeOrderAmount
